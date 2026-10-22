@@ -8,6 +8,7 @@
     { href: "blog.html",        label: "ブログ",     page: "blog.html" },
     { href: "maimai.html",      label: "maimai",     page: "maimai.html" },
     { href: "favorites.html",   label: "好きなもの", page: "favorites.html" },
+    { href: "gadgets.html",     label: "ガジェット", page: "gadgets.html" },
     "-",
     { href: "https://x.com/Kamekun242", label: "X (Twitter)", ext: true },
     { href: "https://maiscore.net/user/kameeeee", label: "maiscore", ext: true },
