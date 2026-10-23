@@ -41,6 +41,14 @@
   iframe.prev{width:100%;height:60vh;border:1px solid rgba(255,255,255,.25);border-radius:16px;background:#0b0b10;margin-top:14px}
   .chk{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;color:var(--text)}
   .chk input{width:20px;height:20px}
+  .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;padding:0;margin:14px 0 0;list-style:none}
+  .gal li{border:1px solid rgba(255,255,255,.2);border-radius:16px;overflow:hidden;background:rgba(0,0,0,.25);display:flex;flex-direction:column}
+  .gal .ph{display:block;aspect-ratio:1/1;background:rgba(255,255,255,.05)}
+  .gal img{display:block;width:100%;height:100%;object-fit:contain}
+  .gal .nm{padding:8px 10px 0;font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+  .gal .sz{padding:0 10px;font-size:11px;color:var(--dim)}
+  .gal .bt{display:flex;gap:6px;padding:8px 10px 10px;margin-top:auto}
+  .gal .abtn{min-height:36px;padding:4px 8px;font-size:12px;flex:1}
   code{background:rgba(255,255,255,.1);padding:1px 6px;border-radius:6px;font-size:.9em}
 </style>
 </head>
@@ -128,6 +136,15 @@
       <div class="row"><button class="abtn main" type="button" id="uGo">アップロード</button></div>
       <p class="hint">ガジェット画像は保存先を <code>gadgets/</code> にして、下のファイル名で1枚ずつアップロードしてください。<br>Vivo: <code>vivo-x200-pro-mini.jpg</code> / iPhone: <code>iphone-13-mini.jpg</code> / Galaxy S22: <code>galaxy-s22.jpg</code> / Xperia 5 IV: <code>xperia-5-iv.jpg</code> / Nothing: <code>nothing-phone-1.jpg</code> / Galaxy S10e: <code>galaxy-s10e-exynos.jpg</code> / Xperia 5: <code>xperia-5.jpg</code></p>
       <p class="hint" id="uRes"></p>
+    </div>
+
+    <h2>画像一覧</h2>
+    <div class="glass">
+      <label for="gDir">フォルダを選ぶ(画像が入っているフォルダだけ出ます)</label>
+      <select id="gDir"></select>
+      <div class="row"><button class="abtn" type="button" id="gReload">再読み込み</button></div>
+      <p class="hint" id="gInfo"></p>
+      <ul class="gal" id="gal"></ul>
     </div>
   </section>
 
@@ -280,6 +297,7 @@
     if (name === "list") loadList();
     if (name === "page") loadTree();
     if (name === "mm") loadMm();
+    if (name === "img") loadImgs(false);
     try { history.replaceState(null, "", "#" + name); } catch (e) {}
   }
   document.querySelector(".tabs").addEventListener("click", function (e) {
@@ -496,8 +514,80 @@
       if (sha && !confirm(path + " は既にあります。上書きしますか?")) throw new Error("キャンセルしました");
       return putFile(path, bytesToB64(new Uint8Array(buf)), "ファイル追加: " + path, sha);
     }).then(function () {
-      $("uRes").textContent = "アップロードしました → " + path; say("アップロードしました", "ok");
+      $("uRes").textContent = "アップロードしました → " + path; say("アップロードしました", "ok"); loadImgs(true);
     }).catch(function (e) { say(friendly(e), "err"); }).then(function () { busy(btn, false); });
+  };
+
+  /* ---------- 画像一覧 ---------- */
+  var IMG_RE = /\.(jpe?g|png|gif|webp|svg|avif|bmp|ico)$/i;
+  var imgTree = null;
+  function dirOf(p) { var i = p.lastIndexOf("/"); return i < 0 ? "" : p.slice(0, i + 1); }
+  function sizeText(n) { return n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB"; }
+  function rawUrl(n) { return "https://raw.githubusercontent.com/" + cfg.repo + "/" + encodeURIComponent(cfg.branch) + "/" + encPath(n.path) + "?v=" + n.sha.slice(0, 8); }
+  function loadImgs(force) {
+    if (imgTree && !force) { drawFolders(); return; }
+    $("gInfo").textContent = "読み込み中…";
+    Promise.resolve().then(function () { return api("/git/trees/" + encodeURIComponent(cfg.branch) + "?recursive=1"); }).then(function (j) {
+      imgTree = j.tree.filter(function (n) { return n.type === "blob" && IMG_RE.test(n.path); });
+      if (j.truncated) say("ファイルが多すぎて一部しか読み込めませんでした", "err");
+      drawFolders();
+    }).catch(function (e) { $("gInfo").textContent = ""; say(friendly(e), "err"); });
+  }
+  function drawFolders() {
+    var sel = $("gDir"), prev = sel.value, counts = {};
+    imgTree.forEach(function (n) { var d = dirOf(n.path); counts[d] = (counts[d] || 0) + 1; });
+    var dirs = Object.keys(counts).sort();
+    sel.innerHTML = "";
+    dirs.forEach(function (d) {
+      var o = document.createElement("option"); o.value = d;
+      o.textContent = (d || "ルート(トップ)") + "  (" + counts[d] + "枚)"; sel.appendChild(o);
+    });
+    if (dirs.indexOf(prev) >= 0) sel.value = prev;
+    drawGallery();
+  }
+  function imgFallback(img, path) {
+    fetch("https://api.github.com/repos/" + cfg.repo + "/contents/" + encPath(path) + "?ref=" + encodeURIComponent(cfg.branch), {
+      headers: { "Authorization": "Bearer " + cfg.token, "Accept": "application/vnd.github.raw" }, cache: "no-store"
+    }).then(function (r) { if (!r.ok) throw 0; return r.blob(); })
+      .then(function (b) { img.src = URL.createObjectURL(b); })
+      .catch(function () { img.alt = "表示できません"; });
+  }
+  function drawGallery() {
+    var ul = $("gal"), dir = $("gDir").value; ul.innerHTML = "";
+    var items = (imgTree || []).filter(function (n) { return dirOf(n.path) === dir; })
+      .sort(function (x, y) { return x.path.localeCompare(y.path); });
+    $("gInfo").textContent = items.length ? items.length + "枚" : "このフォルダに画像はありません";
+    items.forEach(function (n) {
+      var li = document.createElement("li");
+      li.innerHTML = '<a class="ph" target="_blank" rel="noopener"><img alt="" loading="lazy"></a><div class="nm"></div><div class="sz"></div><div class="bt"><button class="abtn" type="button" data-gc>パスをコピー</button><button class="abtn danger" type="button" data-gd>削除</button></div>';
+      var img = li.querySelector("img");
+      li.querySelector(".ph").href = rawUrl(n);
+      li.querySelector(".nm").textContent = n.path.slice(dir.length);
+      li.querySelector(".sz").textContent = sizeText(n.size || 0);
+      li.dataset.path = n.path;
+      img.addEventListener("error", function () { imgFallback(img, n.path); }, { once: true });
+      img.src = rawUrl(n);
+      ul.appendChild(li);
+    });
+  }
+  $("gDir").onchange = drawGallery;
+  $("gReload").onclick = function () { loadImgs(true); };
+  $("gal").onclick = function (e) {
+    var li = e.target.closest("li"); if (!li) return;
+    var path = li.dataset.path, n = imgTree.filter(function (x) { return x.path === path; })[0];
+    if (e.target.closest("[data-gc]")) {
+      var done = function () { say("コピーしました: " + path, "ok"); };
+      if (navigator.clipboard) navigator.clipboard.writeText(path).then(done, function () { say(path, ""); }); else say(path, "");
+    } else if (e.target.closest("[data-gd]") && n) {
+      var warn = "「" + path + "」を削除しますか?\nこの画像を使っているページでは表示されなくなります。";
+      if (dirOf(path) === "") warn += "\n(トップにある画像です。アイコンなどに使っていないか確認してください)";
+      if (!confirm(warn)) return;
+      var b = e.target.closest("[data-gd]"); busy(b, true);
+      api("/contents/" + encPath(path), { method: "DELETE", body: JSON.stringify({ message: "画像を削除: " + path, sha: n.sha, branch: cfg.branch }) }).then(function () {
+        imgTree = imgTree.filter(function (x) { return x.path !== path; });
+        drawFolders(); say("削除しました。1〜2分でサイトにも反映されます。", "ok");
+      }).catch(function (err) { busy(b, false); say(friendly(err), "err"); });
+    }
   };
 
   /* ---------- maimai レーティング表 ---------- */
