@@ -61,4 +61,26 @@
   panel.addEventListener("click", function (e) { if (e.target === panel || e.target.closest("a")) setMenu(false); });
   document.addEventListener("click", function (e) { if (!e.target.closest("#menu")) setMenu(false); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") setMenu(false); });
+  // --- PWA: Service Worker の登録と「ホーム画面に追加」 ---
+  if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () {});
+    });
+  }
+  var installEvent = null;
+  window.addEventListener("beforeinstallprompt", function (e) {
+    e.preventDefault();
+    installEvent = e;
+    var a = document.createElement("a");
+    a.href = "#";
+    a.textContent = "ホーム画面に追加";
+    var hrs = panel.querySelectorAll("hr");
+    panel.insertBefore(a, hrs.length ? hrs[hrs.length - 1] : null);
+    a.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      setMenu(false);
+      if (installEvent) { installEvent.prompt(); installEvent = null; }
+      a.remove();
+    });
+  });
 })();
