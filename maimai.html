@@ -65,6 +65,23 @@
     </li>
   </ul>
 
+  <section id="ratingSec" hidden>
+    <h2>レーティング対象曲</h2>
+    <div class="glass rt-sum">
+      <b id="rtTotal">-</b>
+      <span id="rtMeta"></span>
+    </div>
+    <details class="rt-group glass" open>
+      <summary>新曲 B15 <small id="rtNewSum"></small></summary>
+      <ol class="rt-list" id="rtNew"></ol>
+    </details>
+    <details class="rt-group glass">
+      <summary>旧曲 B35 <small id="rtOldSum"></small></summary>
+      <ol class="rt-list" id="rtOld"></ol>
+    </details>
+    <p class="rt-note">1曲ごとのレーティングは「定数 × 達成率 × 係数」から自動で計算しています(達成率は100.5%が上限)。</p>
+  </section>
+
   <h2>目標</h2>
   <div class="glass">
     <ul class="check">
@@ -78,6 +95,35 @@
     <a class="pill" href="https://maiscore.net/user/kameeeee" target="_blank" rel="noopener">maiscore で見る</a>
   </div>
 </main>
+<script src="rating.js"></script>
+<script>
+(function () {
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  function prep(list) {
+    return (list || []).map(function (s) {
+      return { title: s.title, diff: s.diff, c: +s.c, a: +s.a, r: maimaiRating.calc(s.c, s.a) };
+    }).sort(function (x, y) { return y.r - x.r; });
+  }
+  function draw(id, rows) {
+    document.getElementById(id).innerHTML = rows.map(function (s, i) {
+      return '<li><span class="rt-n">' + (i + 1) + '</span><div class="rt-t"><b>' + esc(s.title) + '</b><span>' +
+        (s.diff ? esc(s.diff) + " " : "") + s.c.toFixed(1) + " ・ " + s.a.toFixed(4) + '%<em>' + maimaiRating.rank(s.a) + '</em></span></div><span class="rt-v">' + s.r + "</span></li>";
+    }).join("");
+  }
+  function sum(rows) { return rows.reduce(function (t, s) { return t + s.r; }, 0); }
+  fetch("data/maimai-rating.json", { cache: "no-cache" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    if (!d) return;
+    var n = prep(d.new), o = prep(d.old);
+    if (!n.length && !o.length) return;
+    draw("rtNew", n); draw("rtOld", o);
+    document.getElementById("rtNewSum").textContent = n.length + "曲 ・ " + sum(n);
+    document.getElementById("rtOldSum").textContent = o.length + "曲 ・ " + sum(o);
+    document.getElementById("rtTotal").textContent = sum(n) + sum(o);
+    document.getElementById("rtMeta").textContent = "合計" + (d.updated ? " ・ " + d.updated + " 更新" : "");
+    document.getElementById("ratingSec").hidden = false;
+  }).catch(function () {});
+})();
+</script>
 <script src="menu.js"></script>
 </body>
 </html>

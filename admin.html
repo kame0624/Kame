@@ -55,6 +55,7 @@
     <button type="button" role="tab" data-tab="list">記事一覧</button>
     <button type="button" role="tab" data-tab="page">ページ編集</button>
     <button type="button" role="tab" data-tab="img">画像</button>
+    <button type="button" role="tab" data-tab="mm">maimai</button>
     <button type="button" role="tab" data-tab="set">設定</button>
   </div>
   <div id="msg" hidden role="status"></div>
@@ -130,6 +131,42 @@
     </div>
   </section>
 
+  <!-- maimai レーティング表 -->
+  <section class="panel" id="tab-mm" hidden>
+    <h2>maimai レーティング表</h2>
+    <div class="glass">
+      <p style="margin:0 0 4px">合計 <b id="mTotal" style="font-size:22px;color:var(--accent)">-</b> <span class="hint" id="mCount"></span></p>
+      <p class="hint" style="margin:0">曲を追加・編集したら、いちばん下の「保存する」を押すとGitHubに反映されます。</p>
+    </div>
+
+    <h2 id="mHead">曲を追加</h2>
+    <div class="glass">
+      <label for="mGroup">分類</label>
+      <select id="mGroup"><option value="new">新曲 B15</option><option value="old">旧曲 B35</option></select>
+      <label for="mTitle">曲名</label>
+      <input type="text" id="mTitle" placeholder="曲名" autocomplete="off">
+      <label for="mDiff">難易度</label>
+      <select id="mDiff"><option>MASTER</option><option>Re:MASTER</option><option>EXPERT</option><option>ADVANCED</option><option>BASIC</option></select>
+      <label for="mConst">譜面定数(例 13.9)</label>
+      <input type="text" id="mConst" inputmode="decimal" placeholder="13.9" autocomplete="off">
+      <label for="mAch">達成率(例 100.5522)</label>
+      <input type="text" id="mAch" inputmode="decimal" placeholder="100.5522" autocomplete="off">
+      <p class="hint" id="mCalc">この曲のレーティング: -</p>
+      <div class="row">
+        <button class="abtn main" type="button" id="mAdd">追加する</button>
+        <button class="abtn" type="button" id="mCancel" hidden>編集をやめる</button>
+      </div>
+    </div>
+
+    <h2 id="mNewHead">新曲 B15</h2>
+    <ul class="plist" id="mNewList"></ul>
+    <h2 id="mOldHead">旧曲 B35</h2>
+    <ul class="plist" id="mOldList"></ul>
+
+    <div class="row" style="margin-top:24px"><button class="abtn main" type="button" id="mSave">保存する(GitHubに反映)</button></div>
+    <p class="hint" id="mDirty"></p>
+  </section>
+
   <!-- 設定 -->
   <section class="panel" id="tab-set" hidden>
     <h2>設定</h2>
@@ -150,6 +187,7 @@
     </div>
   </section>
 </main>
+<script src="rating.js"></script>
 <script src="menu.js"></script>
 <script>
 (function () {
@@ -225,7 +263,7 @@
   }
 
   /* ---------- タブ ---------- */
-  var tabs = ["post", "list", "page", "img", "set"];
+  var tabs = ["post", "list", "page", "img", "mm", "set"];
   function go(name) {
     tabs.forEach(function (t) {
       $("tab-" + t).hidden = t !== name;
@@ -233,6 +271,7 @@
     });
     if (name === "list") loadList();
     if (name === "page") loadTree();
+    if (name === "mm") loadMm();
     try { history.replaceState(null, "", "#" + name); } catch (e) {}
   }
   document.querySelector(".tabs").addEventListener("click", function (e) {
@@ -452,6 +491,87 @@
       $("uRes").textContent = "アップロードしました → " + path; say("アップロードしました", "ok");
     }).catch(function (e) { say(friendly(e), "err"); }).then(function () { busy(btn, false); });
   };
+
+  /* ---------- maimai レーティング表 ---------- */
+  var MM_PATH = "data/maimai-rating.json";
+  var mm = { new: [], old: [] }, mmSha = null, mmLoaded = false, mmEdit = null, mmDirty = false;
+
+  function mmRate(s) { return maimaiRating.calc(s.c, s.a); }
+  function mmSort() { ["new", "old"].forEach(function (g) { mm[g].sort(function (x, y) { return mmRate(y) - mmRate(x); }); }); }
+  function mmSum(list) { return list.reduce(function (t, s) { return t + mmRate(s); }, 0); }
+  function mmMark(on) { mmDirty = on; $("mDirty").textContent = on ? "まだ保存していない変更があります" : ""; }
+  function mmRender() {
+    mmSort();
+    $("mTotal").textContent = mmSum(mm.new) + mmSum(mm.old);
+    $("mCount").textContent = "(新曲 " + mmSum(mm.new) + " / 旧曲 " + mmSum(mm.old) + ")";
+    $("mNewHead").textContent = "新曲 B15(" + mm.new.length + "/15)";
+    $("mOldHead").textContent = "旧曲 B35(" + mm.old.length + "/35)";
+    [["new", "mNewList"], ["old", "mOldList"]].forEach(function (p) {
+      var ul = $(p[1]); ul.innerHTML = "";
+      if (!mm[p[0]].length) { ul.innerHTML = '<li class="hint">まだありません</li>'; return; }
+      mm[p[0]].forEach(function (s, i) {
+        var li = document.createElement("li"); li.className = "glass";
+        li.innerHTML = '<div class="t"><b>' + esc(s.title) + "</b><span>" + esc(s.diff || "") + " " + (+s.c).toFixed(1) + " ・ " + (+s.a).toFixed(4) + "% ・ " + maimaiRating.rank(s.a) + " ・ <b style=\"display:inline;color:var(--accent)\">" + mmRate(s) + '</b></span></div><div class="acts"><button class="abtn" type="button" data-mg="' + p[0] + '" data-mi="' + i + '" data-act="e">編集</button><button class="abtn danger" type="button" data-mg="' + p[0] + '" data-mi="' + i + '" data-act="d">削除</button></div>';
+        ul.appendChild(li);
+      });
+    });
+  }
+  function loadMm() {
+    if (mmLoaded) return;
+    Promise.resolve().then(function () { return readFile(MM_PATH); }).then(function (f) {
+      var d = JSON.parse(f.text);
+      mm = { new: d.new || [], old: d.old || [] }; mmSha = f.sha; mmLoaded = true; mmRender();
+    }).catch(function (e) {
+      if (e.status === 404) { mmLoaded = true; mmSha = null; mmRender(); say("まだデータがありません。曲を追加して保存すると作られます", "ok"); }
+      else say(friendly(e), "err");
+    });
+  }
+  function mmCalcPrev() {
+    var c = parseFloat($("mConst").value), a = parseFloat($("mAch").value);
+    $("mCalc").textContent = (c > 0 && a >= 0) ? "この曲のレーティング: " + maimaiRating.calc(c, a) + "(" + maimaiRating.rank(a) + ")" : "この曲のレーティング: -";
+  }
+  $("mConst").addEventListener("input", mmCalcPrev); $("mAch").addEventListener("input", mmCalcPrev);
+  function mmReset() {
+    mmEdit = null; $("mTitle").value = ""; $("mConst").value = ""; $("mAch").value = "";
+    $("mHead").textContent = "曲を追加"; $("mAdd").textContent = "追加する"; $("mCancel").hidden = true; mmCalcPrev();
+  }
+  $("mCancel").onclick = mmReset;
+  $("mAdd").onclick = function () {
+    var title = $("mTitle").value.trim(), c = parseFloat($("mConst").value), a = parseFloat($("mAch").value);
+    if (!title) { say("曲名を入れてください", "err"); return; }
+    if (!(c >= 1 && c <= 16)) { say("譜面定数は 1〜16 の数字で入れてください(例 13.9)", "err"); return; }
+    if (!(a >= 0 && a <= 101)) { say("達成率は 0〜101 の数字で入れてください(例 100.5522)", "err"); return; }
+    var item = { title: title, diff: $("mDiff").value, c: Math.round(c * 10) / 10, a: Math.round(a * 10000) / 10000 };
+    if (mmEdit) mm[mmEdit.g].splice(mmEdit.i, 1);
+    mm[$("mGroup").value].push(item);
+    say((mmEdit ? "更新" : "追加") + "しました(まだ保存していません)", "ok");
+    mmReset(); mmMark(true); mmRender();
+  };
+  function mmClick(e) {
+    var b = e.target.closest("[data-act]"); if (!b) return;
+    var g = b.dataset.mg, i = +b.dataset.mi, s = mm[g][i];
+    if (b.dataset.act === "e") {
+      mmEdit = { g: g, i: i };
+      $("mGroup").value = g; $("mTitle").value = s.title; $("mDiff").value = s.diff || "MASTER"; $("mConst").value = s.c; $("mAch").value = s.a;
+      $("mHead").textContent = "曲を編集"; $("mAdd").textContent = "更新する"; $("mCancel").hidden = false; mmCalcPrev();
+      $("mHead").scrollIntoView({ behavior: "smooth", block: "start" });
+    } else if (confirm("「" + s.title + "」を削除しますか?")) {
+      mm[g].splice(i, 1); mmReset(); mmMark(true); mmRender();
+    }
+  }
+  $("mNewList").onclick = mmClick; $("mOldList").onclick = mmClick;
+  $("mSave").onclick = function () {
+    var btn = this; busy(btn, true); say("保存中…");
+    mmSort();
+    var data = { updated: today().replace(/-/g, "."), new: mm.new, old: mm.old };
+    writeText(MM_PATH, JSON.stringify(data, null, 2) + "\n", "maimaiレーティング表を更新", mmSha).then(function (r) {
+      mmSha = r.content.sha; mmMark(false); say("保存しました。1〜2分で公開されます。", "ok");
+    }).catch(function (e) {
+      if (e.status === 409 || e.status === 422) mmLoaded = false;
+      say(friendly(e), "err");
+    }).then(function () { busy(btn, false); });
+  };
+  window.addEventListener("beforeunload", function (e) { if (mmDirty) { e.preventDefault(); e.returnValue = ""; } });
 
   /* ---------- 起動 ---------- */
   var h = location.hash.slice(1);
