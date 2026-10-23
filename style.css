@@ -175,3 +175,8 @@ p{margin:0 0 12px}
 .copyright{margin-top:56px;padding-top:18px;border-top:1px solid rgba(255,255,255,.12)}
 .copyright p{margin:0 0 6px;font-size:11px;line-height:1.7;color:var(--dim)}
 .copyright a{color:var(--dim)}
+
+/* 訪問者カウンター(Moe-Counter) */
+.counter{margin-top:56px;text-align:center}
+.counter p{margin:0 0 8px;font-size:12px;color:var(--dim)}
+.counter img{display:inline-block;max-width:100%;height:auto;max-height:48px}
