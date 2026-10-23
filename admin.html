@@ -158,6 +158,14 @@
       </div>
     </div>
 
+    <h2>DX NETから取り込み</h2>
+    <div class="glass">
+      <label for="mImp">ブックマークレットでコピーしたデータを貼り付け</label>
+      <textarea id="mImp" style="min-height:90px" placeholder='{"new":[...],"old":[...]}' spellcheck="false" autocapitalize="off"></textarea>
+      <p class="hint">貼り付けた内容で、いまの新曲・旧曲の一覧を入れ替えます。前に入れた譜面定数は、同じ曲名と難易度なら引き継がれます。定数が分からなかった曲は「定数未入力」と出るので、あとから編集で入れてください。</p>
+      <div class="row"><button class="abtn" type="button" id="mImpGo">取り込む</button></div>
+    </div>
+
     <h2 id="mNewHead">新曲 B15</h2>
     <ul class="plist" id="mNewList"></ul>
     <h2 id="mOldHead">旧曲 B35</h2>
@@ -511,7 +519,7 @@
       if (!mm[p[0]].length) { ul.innerHTML = '<li class="hint">まだありません</li>'; return; }
       mm[p[0]].forEach(function (s, i) {
         var li = document.createElement("li"); li.className = "glass";
-        li.innerHTML = '<div class="t"><b>' + esc(s.title) + "</b><span>" + esc(s.diff || "") + " " + (+s.c).toFixed(1) + " ・ " + (+s.a).toFixed(4) + "% ・ " + maimaiRating.rank(s.a) + " ・ <b style=\"display:inline;color:var(--accent)\">" + mmRate(s) + '</b></span></div><div class="acts"><button class="abtn" type="button" data-mg="' + p[0] + '" data-mi="' + i + '" data-act="e">編集</button><button class="abtn danger" type="button" data-mg="' + p[0] + '" data-mi="' + i + '" data-act="d">削除</button></div>';
+        li.innerHTML = '<div class="t"><b>' + esc(s.title) + "</b><span>" + esc(s.diff || "") + " " + (+s.c > 0 ? (+s.c).toFixed(1) : '<span style="color:#ff8f8f">定数未入力</span>') + " ・ " + (+s.a).toFixed(4) + "% ・ " + maimaiRating.rank(s.a) + " ・ <b style=\"display:inline;color:var(--accent)\">" + mmRate(s) + '</b></span></div><div class="acts"><button class="abtn" type="button" data-mg="' + p[0] + '" data-mi="' + i + '" data-act="e">編集</button><button class="abtn danger" type="button" data-mg="' + p[0] + '" data-mi="' + i + '" data-act="d">削除</button></div>';
         ul.appendChild(li);
       });
     });
@@ -559,6 +567,25 @@
       mm[g].splice(i, 1); mmReset(); mmMark(true); mmRender();
     }
   }
+  $("mImpGo").onclick = function () {
+    var d;
+    try { d = JSON.parse($("mImp").value.trim()); } catch (e) { say("データを読めません。ブックマークレットでコピーした内容をそのまま貼ってください", "err"); return; }
+    if (!d || (!Array.isArray(d.new) && !Array.isArray(d.old))) { say("新曲(new)と旧曲(old)のデータが見つかりません", "err"); return; }
+    var known = {};
+    mm.new.concat(mm.old).forEach(function (s) { if (+s.c > 0) known[s.title + "|" + (s.diff || "")] = +s.c; });
+    var missing = 0;
+    function conv(list) {
+      return (list || []).map(function (s) {
+        var c = +s.c > 0 ? +s.c : (known[s.title + "|" + (s.diff || "")] || 0);
+        if (!(c > 0)) missing++;
+        return { title: String(s.title || "").trim(), diff: s.diff || "MASTER", c: c, a: Math.round((+s.a || 0) * 10000) / 10000 };
+      }).filter(function (s) { return s.title; });
+    }
+    if (mmDirty || mm.new.length + mm.old.length) { if (!confirm("いまの一覧を取り込んだ内容で入れ替えます。よろしいですか?")) return; }
+    mm = { new: conv(d.new), old: conv(d.old) };
+    $("mImp").value = ""; mmMark(true); mmRender();
+    say("取り込みました(新曲 " + mm.new.length + " / 旧曲 " + mm.old.length + ")" + (missing ? "。定数未入力が " + missing + " 曲あります" : "") + "。まだ保存していません", missing ? "" : "ok");
+  };
   $("mNewList").onclick = mmClick; $("mOldList").onclick = mmClick;
   $("mSave").onclick = function () {
     var btn = this; busy(btn, true); say("保存中…");

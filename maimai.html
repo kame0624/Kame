@@ -107,7 +107,7 @@
   function draw(id, rows) {
     document.getElementById(id).innerHTML = rows.map(function (s, i) {
       return '<li><span class="rt-n">' + (i + 1) + '</span><div class="rt-t"><b>' + esc(s.title) + '</b><span>' +
-        (s.diff ? esc(s.diff) + " " : "") + s.c.toFixed(1) + " ・ " + s.a.toFixed(4) + '%<em>' + maimaiRating.rank(s.a) + '</em></span></div><span class="rt-v">' + s.r + "</span></li>";
+        (s.diff ? esc(s.diff) + " " : "") + (s.c > 0 ? s.c.toFixed(1) : "定数?") + " ・ " + s.a.toFixed(4) + '%<em>' + maimaiRating.rank(s.a) + '</em></span></div><span class="rt-v">' + s.r + "</span></li>";
     }).join("");
   }
   function sum(rows) { return rows.reduce(function (t, s) { return t + s.r; }, 0); }
