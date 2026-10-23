@@ -19,7 +19,8 @@
   <!-- 画像は admin.html の「画像」から gadgets/ にアップロードしてください。
        カードを押すと詳細が開きます。詳細用の別画像は、同じ名前の末尾に -2 を付けて gadgets/ に置く(例: vivo-x200-pro-mini-2.jpg)。
        無いときは普通の画像が出ます。別の名前にしたいときは <li> に data-img2="gadgets/名前.jpg" を足す。
-       詳しい説明を出したいときは <li> に data-detail="文章" を足す(改行もそのまま使えます)。 -->
+       詳しい説明は data-detail="文章"、カメラやSoCなどは data-spec="項目|値" を1行ずつ(改行は &#10;)。
+       どちらも管理ページの「ガジェット」タブから入力できます。 -->
   <h2>スマホ</h2>
   <ul class="list gadget-list">
     <li class="glass gadget-card">
@@ -81,7 +82,7 @@
 <dialog class="gd" id="gd" aria-labelledby="gdName">
   <button class="gd-close" type="button" aria-label="閉じる">✕</button>
   <div class="gd-photo"><span class="gd-fallback" id="gdFallback" aria-hidden="true">📱</span><img id="gdImg" alt="" hidden></div>
-  <div class="gd-body"><h3 id="gdName"></h3><p id="gdText"></p></div>
+  <div class="gd-body"><h3 id="gdName"></h3><p id="gdText"></p><dl class="gd-spec" id="gdSpec" hidden></dl></div>
 </dialog>
 <script>
 // ガジェットのカードを押すと、別の画像と詳しい説明を出す
@@ -89,7 +90,7 @@
   var dlg = document.getElementById("gd");
   if (!dlg || !dlg.showModal) return;
   var img = document.getElementById("gdImg"), fb = document.getElementById("gdFallback");
-  var nameEl = document.getElementById("gdName"), textEl = document.getElementById("gdText");
+  var nameEl = document.getElementById("gdName"), textEl = document.getElementById("gdText"), specEl = document.getElementById("gdSpec");
   document.documentElement.classList.add("gd-ready");
   document.querySelectorAll(".gadget-card").forEach(function (c) { c.tabIndex = 0; c.setAttribute("role", "button"); });
 
@@ -101,6 +102,19 @@
     fb.textContent = emoji ? emoji.textContent : "";
     nameEl.textContent = card.querySelector(".gadget-info b").textContent;
     textEl.textContent = card.dataset.detail || card.querySelector(".gadget-info span").textContent;
+    // スペック: data-spec に「項目|値」を1行ずつ(管理ページの「ガジェット」で入力できます)
+    specEl.textContent = "";
+    var rows = 0;
+    (card.dataset.spec || "").split("\n").forEach(function (line) {
+      var p = line.indexOf("|");
+      if (p < 0) return;
+      var k = line.slice(0, p).trim(), v = line.slice(p + 1).trim();
+      if (!k || !v) return;
+      var dt = document.createElement("dt"); dt.textContent = k;
+      var dd = document.createElement("dd"); dd.textContent = v;
+      specEl.appendChild(dt); specEl.appendChild(dd); rows++;
+    });
+    specEl.hidden = !rows;
     img.alt = nameEl.textContent + "の写真";
     img.onerror = function () {                 // 詳細用が無ければ普通の画像、それも無ければ絵文字
       if (mainSrc && img.getAttribute("src") !== mainSrc) img.src = mainSrc;

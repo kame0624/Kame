@@ -58,6 +58,10 @@
   #wList .glass{flex-wrap:wrap}
   #wList .t{flex:1 1 160px}
   #wList .abtn:disabled{opacity:.3}
+  #gList .glass{flex-wrap:wrap}
+  #gList .t{flex:1 1 150px}
+  #gList .tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:50px;border:1px solid var(--accent);color:var(--accent);font-size:11px;font-weight:400;vertical-align:middle}
+  #gList .sec{display:block;color:var(--dim);font-size:11px}
   #wList .acts{flex-wrap:wrap}
   #wList li.off .t{opacity:.55}
   #wList .tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:50px;border:1px solid var(--accent);color:var(--accent);font-size:11px;font-weight:400;vertical-align:middle}
@@ -95,6 +99,7 @@
     <button type="button" role="tab" data-tab="post">投稿</button>
     <button type="button" role="tab" data-tab="list">記事一覧</button>
     <button type="button" role="tab" data-tab="works">作ったもの</button>
+    <button type="button" role="tab" data-tab="gadgets">ガジェット</button>
     <button type="button" role="tab" data-tab="page">ページ編集</button>
     <button type="button" role="tab" data-tab="img">画像</button>
     <button type="button" role="tab" data-tab="mm">maimai</button>
@@ -161,6 +166,37 @@
     <div class="row">
       <button class="abtn main" type="button" id="wSave">保存する</button>
       <button class="abtn" type="button" id="wReload">読み込み直す</button>
+    </div>
+  </section>
+
+  <!-- ガジェット -->
+  <section class="panel" id="tab-gadgets" hidden>
+    <h2>ガジェット</h2>
+    <div class="glass">
+      <p class="hint" style="margin:0">カードを押したときに出る詳細の、説明文とスペック(SoC・カメラなど)を入力します。「編集」で書いて「反映する」、最後に「保存する」でGitHubに送ります。</p>
+    </div>
+
+    <div id="gForm" hidden>
+      <h2 id="gHead">編集</h2>
+      <div class="glass">
+        <label for="gDetail">詳しい説明(空なら一言がそのまま出ます)</label>
+        <textarea id="gDetail" style="min-height:110px" placeholder="使ってみた感想など"></textarea>
+        <div id="gFields"></div>
+        <label for="gOther">その他(1行に「項目|値」)</label>
+        <textarea id="gOther" style="min-height:80px" spellcheck="false" autocapitalize="off" placeholder="重さ|160g"></textarea>
+        <div class="row">
+          <button class="abtn main" type="button" id="gApply">反映する</button>
+          <button class="abtn" type="button" id="gCancel">やめる</button>
+        </div>
+      </div>
+    </div>
+
+    <h2>一覧</h2>
+    <ul class="plist" id="gList"></ul>
+    <p class="hint" id="gDirty" style="color:var(--accent)"></p>
+    <div class="row">
+      <button class="abtn main" type="button" id="gSave">保存する</button>
+      <button class="abtn" type="button" id="gReload">読み込み直す</button>
     </div>
   </section>
 
@@ -411,7 +447,7 @@
   }
 
   /* ---------- タブ ---------- */
-  var tabs = ["post", "list", "works", "page", "img", "mm", "stats", "set"];
+  var tabs = ["post", "list", "works", "gadgets", "page", "img", "mm", "stats", "set"];
   function go(name) {
     tabs.forEach(function (t) {
       $("tab-" + t).hidden = t !== name;
@@ -419,6 +455,7 @@
     });
     if (name === "list") loadList();
     if (name === "works") loadWorks(false);
+    if (name === "gadgets") loadGadgets(false);
     if (name === "page") loadTree();
     if (name === "mm") loadMm();
     if (name === "stats") statsInit();
@@ -707,6 +744,118 @@
   $("wReload").onclick = function () {
     if (w.dirty && !confirm("保存していない変更は消えます。読み込み直しますか?")) return;
     loadWorks(true);
+  };
+
+  /* ---------- ガジェット(gadgets.html の詳細・スペック) ---------- */
+  var GADGETS = "gadgets.html";
+  var CARD_RE = /<li\b[^>]*\bgadget-card\b[^>]*>/g;
+  // 見出し(h2)ごとの入力欄。ここを書き換えると項目を変えられます
+  var SPEC_FIELDS = {
+    "スマホ": ["SoC", "カメラ", "ディスプレイ", "メモリ/ストレージ", "バッテリー", "発売"],
+    "イヤホン": ["ドライバー", "接続", "ノイズキャンセリング", "バッテリー", "発売"]
+  };
+  var gd = { items: [], loaded: false, dirty: false, edit: -1 };
+
+  function gMark(on) { gd.dirty = on; $("gDirty").textContent = on ? "まだ保存していない変更があります" : ""; }
+  function gFields(sec) { return SPEC_FIELDS[sec] || ["発売"]; }
+  function gParse(text) {
+    var doc = new DOMParser().parseFromString(text, "text/html");
+    var cards = doc.querySelectorAll(".gadget-card");
+    if (!cards.length) throw new Error("gadgets.html にガジェットのカードが見つかりません");
+    return Array.prototype.map.call(cards, function (li) {
+      var h = li.parentElement ? li.parentElement.previousElementSibling : null;
+      var b = li.querySelector(".gadget-info b"), sp = li.querySelector(".gadget-info span");
+      return {
+        sec: h && /^H[1-6]$/.test(h.tagName) ? h.textContent.trim() : "",
+        name: b ? b.textContent.trim() : "(名前なし)",
+        desc: sp ? sp.textContent.trim() : "",
+        detail: li.getAttribute("data-detail") || "",
+        spec: li.getAttribute("data-spec") || ""
+      };
+    });
+  }
+  function gAttr(tag, name, value) {
+    tag = tag.replace(new RegExp("\\s" + name + '="[^"]*"'), "");
+    if (!value) return tag;
+    return tag.slice(0, -1) + " " + name + '="' + esc(value).replace(/\r?\n/g, "&#10;") + '">';
+  }
+  function gBuild(text, items) {
+    var k = -1;
+    return text.replace(CARD_RE, function (tag) {
+      var it = items[++k];
+      if (!it) return tag;
+      return gAttr(gAttr(tag, "data-detail", it.detail), "data-spec", it.spec);
+    });
+  }
+  function gRender() {
+    var ul = $("gList");
+    ul.innerHTML = gd.items.map(function (it, i) {
+      var filled = it.detail || it.spec;
+      return '<li class="glass"><div class="t"><span class="sec">' + esc(it.sec) + "</span><b>" + esc(it.name) + (filled ? '<span class="tag">入力済み</span>' : "") + "</b><span>" + esc(it.desc) + '</span></div><div class="acts">' +
+        '<button class="abtn" type="button" data-i="' + i + '">編集</button></div></li>';
+    }).join("");
+  }
+  function gSpecMap(spec) {
+    var map = {}, other = [];
+    spec.split("\n").forEach(function (line) {
+      var p = line.indexOf("|"); if (p < 0) { if (line.trim()) other.push(line); return; }
+      var k = line.slice(0, p).trim(), v = line.slice(p + 1).trim();
+      if (k) map[k] = v;
+    });
+    return map;
+  }
+  function gOpen(i) {
+    var it = gd.items[i], fields = gFields(it.sec), map = gSpecMap(it.spec), other = [];
+    gd.edit = i;
+    $("gHead").textContent = it.name + " を編集";
+    $("gDetail").value = it.detail;
+    $("gFields").innerHTML = fields.map(function (f, n) {
+      return '<label for="gf' + n + '">' + esc(f) + '</label><input type="text" id="gf' + n + '" data-k="' + esc(f) + '" value="' + esc(map[f] || "") + '" autocomplete="off">';
+    }).join("");
+    Object.keys(map).forEach(function (k) { if (fields.indexOf(k) < 0) other.push(k + "|" + map[k]); });
+    $("gOther").value = other.join("\n");
+    $("gForm").hidden = false;
+    $("gHead").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function gClose() { gd.edit = -1; $("gForm").hidden = true; }
+  function loadGadgets(force) {
+    if (gd.loaded && !force) return;
+    $("gList").innerHTML = '<li class="hint">読み込み中…</li>';
+    readFile(GADGETS).then(function (f) {
+      gd.items = gParse(f.text); gd.loaded = true; gMark(false); gClose(); gRender();
+    }).catch(function (e) { $("gList").innerHTML = ""; say(friendly(e), "err"); });
+  }
+  $("gList").onclick = function (e) {
+    var b = e.target.closest("button[data-i]"); if (b) gOpen(+b.dataset.i);
+  };
+  $("gCancel").onclick = gClose;
+  $("gApply").onclick = function () {
+    var it = gd.items[gd.edit]; if (!it) return;
+    var lines = [];
+    Array.prototype.forEach.call($("gFields").querySelectorAll("input[data-k]"), function (inp) {
+      var v = inp.value.trim().replace(/\|/g, "/");
+      if (v) lines.push(inp.dataset.k + "|" + v);
+    });
+    $("gOther").value.split("\n").forEach(function (l) { if (l.trim() && l.indexOf("|") > 0) lines.push(l.trim()); });
+    it.detail = $("gDetail").value.trim();
+    it.spec = lines.join("\n");
+    gMark(true); gRender(); gClose();
+    say("「" + it.name + "」を反映しました(まだ保存していません)", "ok");
+  };
+  $("gSave").onclick = function () {
+    var btn = this; busy(btn, true); say("保存中…");
+    readFile(GADGETS).then(function (f) {
+      var now = gParse(f.text);
+      if (now.length !== gd.items.length || now.some(function (n, i) { return n.name !== gd.items[i].name; }))
+        throw new Error("gadgets.html の中身が変わっています。「読み込み直す」を押してからやり直してください");
+      return writeText(GADGETS, gBuild(f.text, gd.items), "ガジェットの詳細を更新", f.sha);
+    }).then(function () {
+      gMark(false); say("保存しました。1〜2分で公開されます。", "ok");
+    }).catch(function (e) { say(friendly(e), "err"); }).then(function () { busy(btn, false); });
+  };
+  $("gReload").onclick = function () {
+    if (gd.dirty && !confirm("保存していない変更は消えます。読み込み直しますか?")) return;
+    loadGadgets(true);
   };
 
   /* ---------- ページ編集 ---------- */
