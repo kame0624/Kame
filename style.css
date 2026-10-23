@@ -170,3 +170,8 @@ p{margin:0 0 12px}
 .tile:active .tile-ico{transform:scale(.93)}
 .tile-ico svg{width:30px;height:30px;fill:currentColor}
 .tile-ico img{width:100%;height:100%;object-fit:cover}
+
+/* ページ下の著作権表記 */
+.copyright{margin-top:56px;padding-top:18px;border-top:1px solid rgba(255,255,255,.12)}
+.copyright p{margin:0 0 6px;font-size:11px;line-height:1.7;color:var(--dim)}
+.copyright a{color:var(--dim)}
