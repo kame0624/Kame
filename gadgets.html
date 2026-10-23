@@ -16,7 +16,10 @@
 <main>
   <h1 class="sub">ガジェット</h1>
 
-  <!-- 画像は admin.html の「画像」から gadgets/ にアップロードしてください。 -->
+  <!-- 画像は admin.html の「画像」から gadgets/ にアップロードしてください。
+       カードを押すと詳細が開きます。詳細用の別画像は、同じ名前の末尾に -2 を付けて gadgets/ に置く(例: vivo-x200-pro-mini-2.jpg)。
+       無いときは普通の画像が出ます。別の名前にしたいときは <li> に data-img2="gadgets/名前.jpg" を足す。
+       詳しい説明を出したいときは <li> に data-detail="文章" を足す(改行もそのまま使えます)。 -->
   <h2>スマホ</h2>
   <ul class="list gadget-list">
     <li class="glass gadget-card">
@@ -75,6 +78,60 @@
     <li>PC</li>
   </ul>
 </main>
+<dialog class="gd" id="gd" aria-labelledby="gdName">
+  <button class="gd-close" type="button" aria-label="閉じる">✕</button>
+  <div class="gd-photo"><span class="gd-fallback" id="gdFallback" aria-hidden="true">📱</span><img id="gdImg" alt="" hidden></div>
+  <div class="gd-body"><h3 id="gdName"></h3><p id="gdText"></p></div>
+</dialog>
+<script>
+// ガジェットのカードを押すと、別の画像と詳しい説明を出す
+(function () {
+  var dlg = document.getElementById("gd");
+  if (!dlg || !dlg.showModal) return;
+  var img = document.getElementById("gdImg"), fb = document.getElementById("gdFallback");
+  var nameEl = document.getElementById("gdName"), textEl = document.getElementById("gdText");
+  document.documentElement.classList.add("gd-ready");
+  document.querySelectorAll(".gadget-card").forEach(function (c) { c.tabIndex = 0; c.setAttribute("role", "button"); });
+
+  function openCard(card) {
+    var main = card.querySelector(".gadget-photo img");
+    var mainSrc = main ? main.getAttribute("src") : "";
+    var detail = card.dataset.img2 || (mainSrc ? mainSrc.replace(/(\.[a-z0-9]+)$/i, "-2$1") : "");
+    var emoji = card.querySelector(".gadget-fallback");
+    fb.textContent = emoji ? emoji.textContent : "";
+    nameEl.textContent = card.querySelector(".gadget-info b").textContent;
+    textEl.textContent = card.dataset.detail || card.querySelector(".gadget-info span").textContent;
+    img.alt = nameEl.textContent + "の写真";
+    img.onerror = function () {                 // 詳細用が無ければ普通の画像、それも無ければ絵文字
+      if (mainSrc && img.getAttribute("src") !== mainSrc) img.src = mainSrc;
+      else img.hidden = true;
+    };
+    img.hidden = false;
+    img.removeAttribute("src");
+    var first = detail || mainSrc;
+    if (first) img.src = first; else img.hidden = true;
+    document.body.classList.add("gd-open");
+    dlg.showModal();
+    history.pushState({ gd: 1 }, "");           // スマホの戻るで閉じられるように
+  }
+  document.addEventListener("click", function (e) {
+    var card = e.target.closest(".gadget-card");
+    if (card) openCard(card);
+  });
+  document.addEventListener("keydown", function (e) {
+    if ((e.key === "Enter" || e.key === " ") && e.target.classList && e.target.classList.contains("gadget-card")) {
+      e.preventDefault(); openCard(e.target);
+    }
+  });
+  dlg.querySelector(".gd-close").addEventListener("click", function () { dlg.close(); });
+  dlg.addEventListener("click", function (e) { if (e.target === dlg) dlg.close(); });   // 外側を押して閉じる
+  dlg.addEventListener("close", function () {
+    document.body.classList.remove("gd-open");
+    if (history.state && history.state.gd) history.back();
+  });
+  window.addEventListener("popstate", function () { if (dlg.open) dlg.close(); });
+})();
+</script>
 <script src="menu.js?v=6"></script>
 </body>
 </html>
