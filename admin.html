@@ -64,6 +64,7 @@
     <button type="button" role="tab" data-tab="page">ページ編集</button>
     <button type="button" role="tab" data-tab="img">画像</button>
     <button type="button" role="tab" data-tab="mm">maimai</button>
+    <button type="button" role="tab" data-tab="stats">解析</button>
     <button type="button" role="tab" data-tab="set">設定</button>
   </div>
   <div id="msg" hidden role="status"></div>
@@ -175,6 +176,18 @@
       </div>
     </div>
 
+    <h2>レーティング推移</h2>
+    <div class="glass">
+      <label for="hDate">日付</label>
+      <input type="date" id="hDate">
+      <label for="hRate">レーティング(例 15226)</label>
+      <input type="text" id="hRate" inputmode="numeric" placeholder="15226" autocomplete="off">
+      <div class="row"><button class="abtn" type="button" id="hAdd">記録する</button></div>
+      <label class="chk"><input type="checkbox" id="hAuto" checked> 保存するとき、新曲15・旧曲35がそろっていたら、合計を今日の分として自動で記録する</label>
+      <p class="hint">同じ日付に記録すると上書きされます。グラフはmaimaiページに出ます(2回以上記録すると線になります)。</p>
+      <ul class="plist" id="hList" style="margin-top:14px"></ul>
+    </div>
+
     <h2>DX NETから取り込み</h2>
     <div class="glass">
       <label for="mImp">ブックマークレットでコピーしたデータを貼り付け</label>
@@ -190,6 +203,38 @@
 
     <div class="row" style="margin-top:24px"><button class="abtn main" type="button" id="mSave">保存する(GitHubに反映)</button></div>
     <p class="hint" id="mDirty"></p>
+  </section>
+
+  <!-- 解析 -->
+  <section class="panel" id="tab-stats" hidden>
+    <h2>アクセス解析(GoatCounter)</h2>
+    <div class="glass">
+      <p class="hint" style="margin:0 0 6px">広告や個人情報の収集がない、無料のアクセス解析です(個人利用向け)。<br>
+      1. <a href="https://www.goatcounter.com/signup" target="_blank" rel="noopener">goatcounter.com</a> で登録して、好きな「コード」を決める → 2. 下に入れて「サイトの計測を有効にする」 → 3. 数字を見たいときは、GoatCounterの User → API でトークンを作って入れる。</p>
+      <label for="gCode">コード(<code>○○.goatcounter.com</code> の○○)</label>
+      <input type="text" id="gCode" autocapitalize="off" spellcheck="false" placeholder="kame">
+      <div class="row">
+        <button class="abtn main" type="button" id="gOn">サイトの計測を有効にする</button>
+        <button class="abtn danger" type="button" id="gOff">計測を止める</button>
+      </div>
+      <p class="hint" id="gState"></p>
+      <div class="row">
+        <button class="abtn" type="button" id="gSkip">このブラウザは計測しない</button>
+        <a class="abtn" id="gDash" href="https://www.goatcounter.com/" target="_blank" rel="noopener" style="text-decoration:none">ダッシュボードを開く</a>
+      </div>
+      <p class="hint" id="gSkipState"></p>
+    </div>
+
+    <h2>数字を見る</h2>
+    <div class="glass">
+      <label for="gTok">APIトークン(この端末のブラウザの中にだけ保存されます)</label>
+      <input type="password" id="gTok" placeholder="GoatCounterで作ったトークン" autocomplete="off">
+      <label for="gDays">期間</label>
+      <select id="gDays"><option value="1">24時間</option><option value="7" selected>7日間</option><option value="30">30日間</option></select>
+      <div class="row"><button class="abtn main" type="button" id="gLoad">読み込む</button></div>
+      <p class="hint">ブラウザから読めないときは、「ダッシュボードを開く」から見てください(GoatCounter側の制限で、ここに出せない場合があります)。</p>
+      <div id="gOut" style="margin-top:14px"></div>
+    </div>
   </section>
 
   <!-- 設定 -->
@@ -288,7 +333,7 @@
   }
 
   /* ---------- タブ ---------- */
-  var tabs = ["post", "list", "page", "img", "mm", "set"];
+  var tabs = ["post", "list", "page", "img", "mm", "stats", "set"];
   function go(name) {
     tabs.forEach(function (t) {
       $("tab-" + t).hidden = t !== name;
@@ -297,6 +342,7 @@
     if (name === "list") loadList();
     if (name === "page") loadTree();
     if (name === "mm") loadMm();
+    if (name === "stats") statsInit();
     if (name === "img") loadImgs(false);
     try { history.replaceState(null, "", "#" + name); } catch (e) {}
   }
@@ -590,6 +636,48 @@
     }
   };
 
+  /* ---------- maimai 推移 ---------- */
+  var HIST_PATH = "data/maimai-history.json";
+  var hist = { points: [] }, histSha = null, histDirty = false, histLoaded = false;
+  $("hDate").value = today();
+  function refreshDirty() { $("mDirty").textContent = (mmDirty || histDirty) ? "まだ保存していない変更があります" : ""; }
+  function setPoint(d, r) {
+    hist.points = hist.points.filter(function (p) { return p.d !== d; });
+    hist.points.push({ d: d, r: r });
+    hist.points.sort(function (x, y) { return x.d < y.d ? -1 : 1; });
+  }
+  function histRender() {
+    var ul = $("hList"); ul.innerHTML = "";
+    if (!hist.points.length) { ul.innerHTML = '<li class="hint">まだ記録がありません</li>'; return; }
+    hist.points.slice().reverse().forEach(function (p) {
+      var li = document.createElement("li"); li.className = "glass";
+      li.innerHTML = '<div class="t"><b>' + esc(p.r) + "</b><span>" + esc(p.d.replace(/-/g, ".")) + '</span></div><div class="acts"><button class="abtn danger" type="button" data-hd="' + esc(p.d) + '">削除</button></div>';
+      ul.appendChild(li);
+    });
+  }
+  function loadHist() {
+    if (histLoaded) return;
+    Promise.resolve().then(function () { return readFile(HIST_PATH); }).then(function (f) {
+      var d = JSON.parse(f.text); hist = { points: (d.points || []).filter(function (p) { return p && p.d && +p.r > 0; }) };
+      histSha = f.sha; histLoaded = true; histRender();
+    }).catch(function (e) {
+      if (e.status === 404) { histLoaded = true; histSha = null; histRender(); } else say(friendly(e), "err");
+    });
+  }
+  $("hAdd").onclick = function () {
+    var d = $("hDate").value, r = parseInt($("hRate").value, 10);
+    if (!d) { say("日付を入れてください", "err"); return; }
+    if (!(r > 0 && r <= 20000)) { say("レーティングは数字で入れてください(例 15226)", "err"); return; }
+    setPoint(d, r); $("hRate").value = ""; histDirty = true; refreshDirty(); histRender();
+    say("記録しました(まだ保存していません)", "ok");
+  };
+  $("hList").onclick = function (e) {
+    var b = e.target.closest("[data-hd]"); if (!b) return;
+    if (!confirm(b.dataset.hd + " の記録を削除しますか?")) return;
+    hist.points = hist.points.filter(function (p) { return p.d !== b.dataset.hd; });
+    histDirty = true; refreshDirty(); histRender();
+  };
+
   /* ---------- maimai レーティング表 ---------- */
   var MM_PATH = "data/maimai-rating.json";
   var mm = { new: [], old: [] }, mmSha = null, mmLoaded = false, mmEdit = null, mmDirty = false;
@@ -597,7 +685,7 @@
   function mmRate(s) { return maimaiRating.calc(s.c, s.a); }
   function mmSort() { ["new", "old"].forEach(function (g) { mm[g].sort(function (x, y) { return mmRate(y) - mmRate(x); }); }); }
   function mmSum(list) { return list.reduce(function (t, s) { return t + mmRate(s); }, 0); }
-  function mmMark(on) { mmDirty = on; $("mDirty").textContent = on ? "まだ保存していない変更があります" : ""; }
+  function mmMark(on) { mmDirty = on; refreshDirty(); }
   function mmRender() {
     mmSort();
     $("mTotal").textContent = mmSum(mm.new) + mmSum(mm.old);
@@ -615,6 +703,7 @@
     });
   }
   function loadMm() {
+    loadHist();
     if (mmLoaded) return;
     Promise.resolve().then(function () { return readFile(MM_PATH); }).then(function (f) {
       var d = JSON.parse(f.text);
@@ -680,15 +769,93 @@
   $("mSave").onclick = function () {
     var btn = this; busy(btn, true); say("保存中…");
     mmSort();
-    var data = { updated: today().replace(/-/g, "."), new: mm.new, old: mm.old };
-    writeText(MM_PATH, JSON.stringify(data, null, 2) + "\n", "maimaiレーティング表を更新", mmSha).then(function (r) {
-      mmSha = r.content.sha; mmMark(false); say("保存しました。1〜2分で公開されます。", "ok");
+    var wrote = [];
+    var p = Promise.resolve();
+    if (mmDirty || !mmSha) {
+      p = p.then(function () {
+        var data = { updated: today().replace(/-/g, "."), new: mm.new, old: mm.old };
+        return writeText(MM_PATH, JSON.stringify(data, null, 2) + "\n", "maimaiレーティング表を更新", mmSha);
+      }).then(function (r) { mmSha = r.content.sha; mmMark(false); wrote.push("レーティング表"); });
+    }
+    p = p.then(function () {
+      var total = mmSum(mm.new) + mmSum(mm.old);
+      if ($("hAuto").checked && mm.new.length >= 15 && mm.old.length >= 35 && total > 0) { setPoint(today(), total); histDirty = true; histRender(); }
+      if (histDirty) {
+        return writeText(HIST_PATH, JSON.stringify(hist, null, 2) + "\n", "maimaiレーティング推移を更新", histSha)
+          .then(function (r) { histSha = r.content.sha; histDirty = false; refreshDirty(); wrote.push("推移"); });
+      }
+    }).then(function () {
+      say(wrote.length ? wrote.join("と") + "を保存しました。1〜2分で公開されます。" : "変更はありませんでした", wrote.length ? "ok" : "");
     }).catch(function (e) {
-      if (e.status === 409 || e.status === 422) mmLoaded = false;
+      if (e.status === 409 || e.status === 422) { mmLoaded = false; histLoaded = false; }
       say(friendly(e), "err");
     }).then(function () { busy(btn, false); });
   };
-  window.addEventListener("beforeunload", function (e) { if (mmDirty) { e.preventDefault(); e.returnValue = ""; } });
+  window.addEventListener("beforeunload", function (e) { if (mmDirty || histDirty) { e.preventDefault(); e.returnValue = ""; } });
+
+  /* ---------- アクセス解析 (GoatCounter) ---------- */
+  var gcInit = false;
+  function gcCode() { return ($("gCode").value || "").trim().toLowerCase().replace(/\.goatcounter\.com.*$/, ""); }
+  function gcRefresh() {
+    var c = gcCode();
+    $("gDash").href = c ? "https://" + c + ".goatcounter.com/" : "https://www.goatcounter.com/";
+    var skipped = false; try { skipped = localStorage.getItem("skipgc") === "t"; } catch (e) {}
+    $("gSkip").textContent = skipped ? "このブラウザの計測除外を解除" : "このブラウザは計測しない";
+    $("gSkipState").textContent = skipped ? "いまこのブラウザ(自分の訪問)は計測されません。" : "";
+  }
+  function statsInit() {
+    if (!gcInit) { gcInit = true; $("gCode").value = cfg.gcCode || ""; $("gTok").value = cfg.gcToken || ""; $("gCode").addEventListener("input", gcRefresh);
+      Promise.resolve().then(function () { return readFile("menu.js"); }).then(function (f) {
+        var m = f.text.match(/var GOATCOUNTER = "([^"]*)";/);
+        $("gState").textContent = m ? (m[1] ? "いまのサイト:「" + m[1] + "」で計測しています" : "いまのサイト:計測していません") : "menu.js に計測用の設定が見つかりません(最新の menu.js を上げてください)";
+        if (m && m[1] && !$("gCode").value) { $("gCode").value = m[1]; gcRefresh(); }
+      }).catch(function () {});
+    }
+    gcRefresh();
+  }
+  function gcSet(code) {
+    if (code && !/^[a-z0-9][a-z0-9-]{1,}$/.test(code)) { say("コードは半角の英数字とハイフンで入れてください", "err"); return; }
+    say("menu.js を更新中…");
+    readFile("menu.js").then(function (f) {
+      if (!/var GOATCOUNTER = "[^"]*";/.test(f.text)) throw new Error("menu.js に計測用の設定が見つかりません。最新の menu.js を先にアップしてください");
+      var t = f.text.replace(/var GOATCOUNTER = "[^"]*";/, 'var GOATCOUNTER = "' + code + '";');
+      return writeText("menu.js", t, code ? "アクセス解析を有効化: " + code : "アクセス解析を停止", f.sha);
+    }).then(function () {
+      cfg.gcCode = code; persist();
+      $("gState").textContent = code ? "いまのサイト:「" + code + "」で計測しています(反映まで1〜2分)" : "いまのサイト:計測していません";
+      say(code ? "計測を有効にしました。1〜2分で反映されます。" : "計測を止めました。", "ok");
+    }).catch(function (e) { say(friendly(e), "err"); });
+  }
+  $("gOn").onclick = function () { var c = gcCode(); if (!c) { say("コードを入れてください", "err"); return; } gcSet(c); };
+  $("gOff").onclick = function () { if (confirm("サイト全体の計測を止めますか?")) gcSet(""); };
+  $("gSkip").onclick = function () {
+    try { if (localStorage.getItem("skipgc") === "t") localStorage.removeItem("skipgc"); else localStorage.setItem("skipgc", "t"); } catch (e) { say("この設定はこのブラウザでは使えません", "err"); }
+    gcRefresh();
+  };
+  function gcApi(path) {
+    return fetch("https://" + cfg.gcCode + ".goatcounter.com/api/v0" + path, { headers: { "Authorization": "Bearer " + cfg.gcToken, "Accept": "application/json" } })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || (j.errors && JSON.stringify(j.errors)) || ("HTTP " + r.status)); return j; }); });
+  }
+  $("gLoad").onclick = function () {
+    cfg.gcCode = gcCode(); cfg.gcToken = $("gTok").value.trim(); persist();
+    if (!cfg.gcCode || !cfg.gcToken) { say("コードとAPIトークンを入れてください", "err"); return; }
+    var days = +$("gDays").value, end = new Date(), start = new Date(end.getTime() - days * 864e5);
+    var q = "?start=" + encodeURIComponent(start.toISOString()) + "&end=" + encodeURIComponent(end.toISOString());
+    var btn = this; busy(btn, true); say("読み込み中…");
+    Promise.all([gcApi("/stats/total" + q), gcApi("/stats/hits" + q + "&limit=10")]).then(function (r) {
+      var t = r[0], hits = (r[1].hits || []);
+      var html = '<p style="margin:0 0 10px">訪問者 <b style="font-size:26px;color:var(--accent)">' + esc(t.total != null ? t.total : "-") + "</b> <span class=\"hint\">(期間: " + days + "日)</span></p>";
+      if (hits.length) {
+        html += '<ul class="plist">' + hits.map(function (h) {
+          return '<li class="glass"><div class="t"><b>' + esc(h.path || "") + "</b><span>" + esc(h.title || "") + '</span></div><div class="acts"><b style="color:var(--accent)">' + esc(h.count != null ? h.count : "") + "</b></div></li>";
+        }).join("") + "</ul>";
+      } else html += '<p class="hint">この期間のデータはまだありません</p>';
+      $("gOut").innerHTML = html; say("読み込みました", "ok");
+    }).catch(function (e) {
+      var net = e instanceof TypeError;
+      say(net ? "ブラウザから読めませんでした(GoatCounter側の制限か、コード・ネットワークの問題かもしれません)。「ダッシュボードを開く」から見てください。" : "読み込めません: " + e.message, "err");
+    }).then(function () { busy(btn, false); });
+  };
 
   /* ---------- 起動 ---------- */
   var h = location.hash.slice(1);

@@ -1,6 +1,17 @@
 // 全ページ共通のメニュー(左上のサイト名 + 右上の甲羅ボタン)
 // メニューの項目を変えたいときは、下の ITEMS だけ編集すれば全ページに反映されます。
 (function () {
+  // アクセス解析(GoatCounter)。ここに自分のコードを入れると全ページで計測されます。
+  // 管理ページの「解析」タブから自動で書き換えられます。空のままなら計測しません。
+  var GOATCOUNTER = "";
+  if (GOATCOUNTER && !/admin\.html$/.test(location.pathname)) {
+    window.goatcounter = { endpoint: "https://" + GOATCOUNTER + ".goatcounter.com/count" };
+    var gs = document.createElement("script");
+    gs.async = true; gs.src = "https://gc.zgo.at/count.js";
+    gs.setAttribute("data-goatcounter", window.goatcounter.endpoint);
+    document.head.appendChild(gs);
+  }
+
   var ITEMS = [
     { href: "index.html#top",   label: "ホーム",     page: "index.html" },
     { href: "index.html#about", label: "自己紹介" },

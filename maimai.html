@@ -65,6 +65,14 @@
     </li>
   </ul>
 
+  <section id="histSec" hidden>
+    <h2>レーティング推移</h2>
+    <div class="glass">
+      <div class="hist-sum"><b id="histNow">-</b><span id="histDiff"></span></div>
+      <div class="hist-chart" id="histChart"></div>
+    </div>
+  </section>
+
   <section id="ratingSec" hidden>
     <h2>レーティング対象曲</h2>
     <div class="glass rt-sum">
@@ -130,6 +138,49 @@
   }).catch(function () {});
 })();
 </script>
-<script src="menu.js?v=5"></script>
+<script>
+(function () {
+  function short(d) { var a = d.split("-"); return +a[1] + "/" + +a[2]; }
+  function draw(pts) {
+    var W = 320, H = 170, L = 46, R = 14, T = 14, B = 28;
+    var rs = pts.map(function (p) { return p.r; }), rmin = Math.min.apply(null, rs), rmax = Math.max.apply(null, rs);
+    var margin = Math.max((rmax - rmin) * 0.15, 20);
+    var lo = Math.floor((rmin - margin) / 10) * 10, hi = Math.ceil((rmax + margin) / 10) * 10;
+    var t0 = Date.parse(pts[0].d), t1 = Date.parse(pts[pts.length - 1].d);
+    function X(t) { return L + (t - t0) / ((t1 - t0) || 1) * (W - L - R); }
+    function Y(r) { return T + (hi - r) / (hi - lo) * (H - T - B); }
+    var line = "", i;
+    pts.forEach(function (p, k) { line += (k ? "L" : "M") + X(Date.parse(p.d)).toFixed(1) + " " + Y(p.r).toFixed(1); });
+    var last = pts[pts.length - 1], first = pts[0];
+    var area = line + "L" + X(t1).toFixed(1) + " " + (H - B) + "L" + X(t0).toFixed(1) + " " + (H - B) + "Z";
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="レーティング推移のグラフ">';
+    s += '<defs><linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2ee6b6" stop-opacity=".35"/><stop offset="1" stop-color="#2ee6b6" stop-opacity="0"/></linearGradient></defs>';
+    [lo, (lo + hi) / 2, hi].forEach(function (v) {
+      s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '" stroke="rgba(255,255,255,.14)" stroke-width="1"/>';
+      s += '<text x="' + (L - 6) + '" y="' + (Y(v) + 3).toFixed(1) + '" text-anchor="end" font-size="10" fill="rgba(243,241,238,.62)">' + Math.round(v) + "</text>";
+    });
+    s += '<path d="' + area + '" fill="url(#hg)"/>';
+    s += '<path d="' + line + '" fill="none" stroke="#2ee6b6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+    pts.forEach(function (p) { s += '<circle cx="' + X(Date.parse(p.d)).toFixed(1) + '" cy="' + Y(p.r).toFixed(1) + '" r="3" fill="#0b0b10" stroke="#2ee6b6" stroke-width="2"/>'; });
+    s += '<text x="' + (X(t1) - 2).toFixed(1) + '" y="' + (Y(last.r) - 9).toFixed(1) + '" text-anchor="end" font-size="11" font-weight="700" fill="#f3f1ee">' + last.r + "</text>";
+    s += '<text x="' + L + '" y="' + (H - 8) + '" text-anchor="start" font-size="10" fill="rgba(243,241,238,.62)">' + short(first.d) + "</text>";
+    s += '<text x="' + (W - R) + '" y="' + (H - 8) + '" text-anchor="end" font-size="10" fill="rgba(243,241,238,.62)">' + short(last.d) + "</text>";
+    document.getElementById("histChart").innerHTML = s + "</svg>";
+  }
+  fetch("data/maimai-history.json", { cache: "no-cache" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    if (!d || !d.points || !d.points.length) return;
+    var pts = d.points.filter(function (p) { return p.d && +p.r > 0; }).sort(function (a, b) { return a.d < b.d ? -1 : 1; });
+    if (!pts.length) return;
+    var last = pts[pts.length - 1], prev = pts.length > 1 ? pts[pts.length - 2] : null;
+    document.getElementById("histNow").textContent = last.r;
+    document.getElementById("histDiff").textContent = prev
+      ? "前回(" + short(prev.d) + ")から " + (last.r - prev.r > 0 ? "+" : "") + (last.r - prev.r)
+      : last.d.replace(/-/g, ".") + " 時点";
+    if (pts.length >= 2) draw(pts);
+    document.getElementById("histSec").hidden = false;
+  }).catch(function () {});
+})();
+</script>
+<script src="menu.js?v=6"></script>
 </body>
 </html>
