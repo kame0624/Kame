@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0b10">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kame">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="robots" content="noindex,nofollow">
 <title>管理 | Kame</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -49,6 +55,9 @@
   .gal .sz{padding:0 10px;font-size:11px;color:var(--dim)}
   .gal .bt{display:flex;gap:6px;padding:8px 10px 10px;margin-top:auto}
   .gal .abtn{min-height:36px;padding:4px 8px;font-size:12px;flex:1}
+  #wList .glass{flex-wrap:wrap}
+  #wList .t{flex:1 1 160px}
+  #wList .abtn:disabled{opacity:.3}
   code{background:rgba(255,255,255,.1);padding:1px 6px;border-radius:6px;font-size:.9em}
 </style>
 </head>
@@ -61,6 +70,7 @@
   <div class="tabs" role="tablist">
     <button type="button" role="tab" data-tab="post">投稿</button>
     <button type="button" role="tab" data-tab="list">記事一覧</button>
+    <button type="button" role="tab" data-tab="works">作ったもの</button>
     <button type="button" role="tab" data-tab="page">ページ編集</button>
     <button type="button" role="tab" data-tab="img">画像</button>
     <button type="button" role="tab" data-tab="mm">maimai</button>
@@ -99,6 +109,34 @@
     <h2>記事一覧</h2>
     <div class="row" style="margin:0 0 12px"><button class="abtn" type="button" id="lReload">再読み込み</button></div>
     <ul class="plist" id="plist"></ul>
+  </section>
+
+  <!-- 作ったもの -->
+  <section class="panel" id="tab-works" hidden>
+    <h2>作ったもの</h2>
+    <div class="glass">
+      <p class="hint" style="margin:0">「作ったもの」ページの一覧です。追加・編集・並び替え・削除をしたら、いちばん下の「保存する」を押すとGitHubに反映されます。</p>
+    </div>
+
+    <h2 id="wHead">追加する</h2>
+    <div class="glass">
+      <label for="wName">名前</label>
+      <input type="text" id="wName" placeholder="アプリの名前" autocomplete="off">
+      <label for="wDesc">説明</label>
+      <input type="text" id="wDesc" placeholder="どんなものか、一言で" autocomplete="off">
+      <div class="row">
+        <button class="abtn main" type="button" id="wAdd">追加する</button>
+        <button class="abtn" type="button" id="wCancel" hidden>編集をやめる</button>
+      </div>
+    </div>
+
+    <h2>一覧</h2>
+    <ul class="plist" id="wList"></ul>
+    <p class="hint" id="wDirty" style="color:var(--accent)"></p>
+    <div class="row">
+      <button class="abtn main" type="button" id="wSave">保存する</button>
+      <button class="abtn" type="button" id="wReload">読み込み直す</button>
+    </div>
   </section>
 
   <!-- ページ編集 -->
@@ -255,10 +293,21 @@
         <button class="abtn danger" type="button" id="sClear">トークンを消す</button>
       </div>
     </div>
-  </section>
+  
+    <h2>アプリとして使う</h2>
+    <div class="glass">
+      <p class="hint" style="margin:0 0 4px" id="iState"></p>
+      <div class="row">
+        <button class="abtn main" type="button" id="iInstall" hidden>ホーム画面に追加</button>
+      </div>
+      <p class="hint" id="iHelp">ボタンが出ないとき:<br>
+      Android(Chrome) … 右上のメニュー(︙)→「ホーム画面に追加」または「アプリをインストール」<br>
+      iPhone(Safari) … 下の共有ボタン→「ホーム画面に追加」</p>
+    </div>
+</section>
 </main>
 <script src="rating.js"></script>
-<script src="menu.js"></script>
+<script src="menu.js?v=7"></script>
 <script>
 (function () {
   "use strict";
@@ -333,13 +382,14 @@
   }
 
   /* ---------- タブ ---------- */
-  var tabs = ["post", "list", "page", "img", "mm", "stats", "set"];
+  var tabs = ["post", "list", "works", "page", "img", "mm", "stats", "set"];
   function go(name) {
     tabs.forEach(function (t) {
       $("tab-" + t).hidden = t !== name;
       document.querySelector('[data-tab="' + t + '"]').setAttribute("aria-selected", t === name);
     });
     if (name === "list") loadList();
+    if (name === "works") loadWorks(false);
     if (name === "page") loadTree();
     if (name === "mm") loadMm();
     if (name === "stats") statsInit();
@@ -506,6 +556,93 @@
       }).then(function () { say("削除しました。", "ok"); loadList(); })
         .catch(function (e) { say(friendly(e), "err"); });
     }
+  };
+
+  /* ---------- 作ったもの(works.html) ---------- */
+  var WORKS = "works.html";
+  var UL_RE = /(<ul\b[^>]*class="[^"]*\blist\b[^"]*"[^>]*>)([\s\S]*?)(<\/ul>)/;
+  var w = { items: [], loaded: false, dirty: false, edit: -1 };
+
+  function wMark(on) { w.dirty = on; $("wDirty").textContent = on ? "まだ保存していない変更があります" : ""; }
+  function wLi(name, desc) { return '<li class="glass"><b>' + esc(name) + "</b><span>" + esc(desc) + "</span></li>"; }
+  function wParse(text) {
+    var m = text.match(UL_RE);
+    if (!m) throw new Error('works.html に一覧(<ul class="list">)が見つかりません。ページ編集で確認してください');
+    return (m[2].match(/<li\b[\s\S]*?<\/li>/g) || []).map(function (html) {
+      var d = new DOMParser().parseFromString(html, "text/html");
+      var b = d.querySelector("b"), sp = d.querySelector("span");
+      return { html: html.trim(), name: (b ? b.textContent : d.body.textContent).trim(), desc: sp ? sp.textContent.trim() : "" };
+    });
+  }
+  function wBuild(text, items) {
+    return text.replace(UL_RE, function (all, open, inner, close) {
+      return open + "\n" + items.map(function (it) { return "    " + it.html; }).join("\n") + (items.length ? "\n  " : "  ") + close;
+    });
+  }
+  function wRender() {
+    var ul = $("wList");
+    if (!w.items.length) { ul.innerHTML = '<li class="hint">まだありません</li>'; return; }
+    ul.innerHTML = w.items.map(function (it, i) {
+      return '<li class="glass"><div class="t"><b>' + esc(it.name) + "</b><span>" + esc(it.desc) + '</span></div><div class="acts">' +
+        '<button class="abtn" type="button" data-a="up" data-i="' + i + '" aria-label="上へ"' + (i === 0 ? " disabled" : "") + ">↑</button>" +
+        '<button class="abtn" type="button" data-a="down" data-i="' + i + '" aria-label="下へ"' + (i === w.items.length - 1 ? " disabled" : "") + ">↓</button>" +
+        '<button class="abtn" type="button" data-a="edit" data-i="' + i + '">編集</button>' +
+        '<button class="abtn danger" type="button" data-a="del" data-i="' + i + '">削除</button></div></li>';
+    }).join("");
+  }
+  function wReset() {
+    w.edit = -1; $("wName").value = ""; $("wDesc").value = "";
+    $("wHead").textContent = "追加する"; $("wAdd").textContent = "追加する"; $("wCancel").hidden = true;
+  }
+  function loadWorks(force) {
+    if (w.loaded && !force) return;
+    $("wList").innerHTML = '<li class="hint">読み込み中…</li>';
+    readFile(WORKS).then(function (f) {
+      w.items = wParse(f.text); w.loaded = true; wMark(false); wReset(); wRender();
+    }).catch(function (e) { $("wList").innerHTML = ""; say(friendly(e), "err"); });
+  }
+  $("wCancel").onclick = wReset;
+  $("wAdd").onclick = function () {
+    var name = $("wName").value.trim(), desc = $("wDesc").value.trim();
+    if (!name) { say("名前を入れてください", "err"); return; }
+    if (w.edit >= 0) {
+      var old = w.items[w.edit];
+      if (old.name !== name || old.desc !== desc) w.items[w.edit] = { html: wLi(name, desc), name: name, desc: desc };
+    } else {
+      w.items.push({ html: wLi(name, desc), name: name, desc: desc });
+    }
+    say((w.edit >= 0 ? "更新" : "追加") + "しました(まだ保存していません)", "ok");
+    wReset(); wMark(true); wRender();
+  };
+  $("wList").onclick = function (e) {
+    var b = e.target.closest("[data-a]"); if (!b) return;
+    var i = +b.dataset.i, it = w.items[i], a = b.dataset.a;
+    if (a === "up" || a === "down") {
+      var j = a === "up" ? i - 1 : i + 1;
+      if (j < 0 || j >= w.items.length) return;
+      var t = w.items[i]; w.items[i] = w.items[j]; w.items[j] = t;
+      if (w.edit === i) w.edit = j; else if (w.edit === j) w.edit = i;
+      wMark(true); wRender();
+    } else if (a === "edit") {
+      w.edit = i; $("wName").value = it.name; $("wDesc").value = it.desc;
+      $("wHead").textContent = "編集する"; $("wAdd").textContent = "更新する"; $("wCancel").hidden = false;
+      $("wHead").scrollIntoView({ behavior: "smooth", block: "start" });
+    } else if (confirm("「" + it.name + "」を削除しますか?")) {
+      w.items.splice(i, 1); wReset(); wMark(true); wRender();
+    }
+  };
+  $("wSave").onclick = function () {
+    var btn = this; busy(btn, true); say("保存中…");
+    readFile(WORKS).then(function (f) {
+      if (!UL_RE.test(f.text)) throw new Error("works.html に一覧が見つかりません");
+      return writeText(WORKS, wBuild(f.text, w.items), "作ったものを更新", f.sha);
+    }).then(function () {
+      wMark(false); say("保存しました。1〜2分で公開されます。", "ok");
+    }).catch(function (e) { say(friendly(e), "err"); }).then(function () { busy(btn, false); });
+  };
+  $("wReload").onclick = function () {
+    if (w.dirty && !confirm("保存していない変更は消えます。読み込み直しますか?")) return;
+    loadWorks(true);
   };
 
   /* ---------- ページ編集 ---------- */
@@ -856,6 +993,25 @@
       say(net ? "ブラウザから読めませんでした(GoatCounter側の制限か、コード・ネットワークの問題かもしれません)。「ダッシュボードを開く」から見てください。" : "読み込めません: " + e.message, "err");
     }).then(function () { busy(btn, false); });
   };
+
+  /* ---------- ホーム画面に追加(PWA) ---------- */
+  function installInit() {
+    var standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone;
+    var btn = $("iInstall"), st = $("iState");
+    if (standalone) { st.textContent = "いまアプリとして開いています。"; btn.hidden = true; $("iHelp").hidden = true; return; }
+    if (window.kameInstallEvent) { st.textContent = "この端末のホーム画面に、アプリとして追加できます。"; btn.hidden = false; $("iHelp").hidden = true; }
+    else { st.textContent = "追加の準備ができていないか、すでに追加済みです。"; btn.hidden = true; $("iHelp").hidden = false; }
+  }
+  window.addEventListener("kame-installable", installInit);
+  $("iInstall").onclick = function () {
+    var ev = window.kameInstallEvent; if (!ev) return;
+    ev.prompt();
+    ev.userChoice.then(function (r) {
+      window.kameInstallEvent = null; installInit();
+      say(r.outcome === "accepted" ? "ホーム画面に追加しました" : "追加をやめました", r.outcome === "accepted" ? "ok" : "");
+    });
+  };
+  installInit();
 
   /* ---------- 起動 ---------- */
   var h = location.hash.slice(1);

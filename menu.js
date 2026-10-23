@@ -50,6 +50,14 @@
   var main = document.querySelector("main");
   while (wrap.firstChild) main.parentNode.insertBefore(wrap.firstChild, main);
 
+  // --- ページ切り替えアニメ(Firefox など、CSS のトランジションが使えないブラウザ用) ---
+  if (!("onpageswap" in window) && !window.matchMedia("(prefers-reduced-motion: reduce)").matches && main.animate) {
+    main.animate(
+      [{ opacity: 0, transform: "translateY(12px)" }, { opacity: 1, transform: "none" }],
+      { duration: 300, easing: "cubic-bezier(.2,.7,.2,1)" }
+    );
+  }
+
   var menuBtn = document.getElementById("menuBtn"), panel = document.getElementById("menuPanel");
   function setMenu(open) {
     panel.hidden = !open;
@@ -67,20 +75,11 @@
       navigator.serviceWorker.register("sw.js").catch(function () {});
     });
   }
-  var installEvent = null;
+  // 「ホーム画面に追加」はメニューには出さず、管理ページの設定タブから行う。
+  // ここでは追加の準備ができたことだけ覚えておく。
   window.addEventListener("beforeinstallprompt", function (e) {
     e.preventDefault();
-    installEvent = e;
-    var a = document.createElement("a");
-    a.href = "#";
-    a.textContent = "ホーム画面に追加";
-    var hrs = panel.querySelectorAll("hr");
-    panel.insertBefore(a, hrs.length ? hrs[hrs.length - 1] : null);
-    a.addEventListener("click", function (ev) {
-      ev.preventDefault();
-      setMenu(false);
-      if (installEvent) { installEvent.prompt(); installEvent = null; }
-      a.remove();
-    });
+    window.kameInstallEvent = e;
+    window.dispatchEvent(new Event("kame-installable"));
   });
 })();
