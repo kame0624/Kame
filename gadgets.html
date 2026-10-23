@@ -19,7 +19,7 @@
   <!-- 画像は admin.html の「画像」から gadgets/ にアップロードしてください。
        カードを押すと詳細が開きます。詳細用の別画像は、同じ名前の末尾に -2 を付けて gadgets/ に置く(例: vivo-x200-pro-mini-2.jpg)。
        無いときは普通の画像が出ます。別の名前にしたいときは <li> に data-img2="gadgets/名前.jpg" を足す。
-       詳しい説明は data-detail="文章"、カメラやSoCなどは data-spec="項目|値" を1行ずつ(改行は &#10;)。
+       詳しい説明は data-detail="文章"、カメラやSoCなどは data-spec="項目|値" を1行ずつ(改行は &#10;)。カメラは「カメラ|メイン::50MP f/1.6」の形で3行まで。
        どちらも管理ページの「ガジェット」タブから入力できます。 -->
   <h2>スマホ</h2>
   <ul class="list gadget-list">
@@ -80,9 +80,14 @@
   </ul>
 </main>
 <dialog class="gd" id="gd" aria-labelledby="gdName">
+  <div class="gd-grip" aria-hidden="true"></div>
   <button class="gd-close" type="button" aria-label="閉じる">✕</button>
-  <div class="gd-photo"><span class="gd-fallback" id="gdFallback" aria-hidden="true">📱</span><img id="gdImg" alt="" hidden></div>
-  <div class="gd-body"><h3 id="gdName"></h3><p id="gdText"></p><dl class="gd-spec" id="gdSpec" hidden></dl></div>
+  <div class="gd-photo">
+    <span class="gd-fallback" id="gdFallback" aria-hidden="true">📱</span>
+    <img id="gdImg" alt="" hidden>
+    <div class="gd-title"><span class="gd-chip" id="gdChip" hidden></span><h3 id="gdName"></h3></div>
+  </div>
+  <div class="gd-body"><p id="gdText"></p><dl class="gd-spec" id="gdSpec" hidden></dl></div>
 </dialog>
 <script>
 // ガジェットのカードを押すと、別の画像と詳しい説明を出す
@@ -90,7 +95,7 @@
   var dlg = document.getElementById("gd");
   if (!dlg || !dlg.showModal) return;
   var img = document.getElementById("gdImg"), fb = document.getElementById("gdFallback");
-  var nameEl = document.getElementById("gdName"), textEl = document.getElementById("gdText"), specEl = document.getElementById("gdSpec");
+  var nameEl = document.getElementById("gdName"), textEl = document.getElementById("gdText"), specEl = document.getElementById("gdSpec"), chipEl = document.getElementById("gdChip");
   document.documentElement.classList.add("gd-ready");
   document.querySelectorAll(".gadget-card").forEach(function (c) { c.tabIndex = 0; c.setAttribute("role", "button"); });
 
@@ -104,22 +109,48 @@
     textEl.textContent = card.dataset.detail || card.querySelector(".gadget-info span").textContent;
     // スペック: data-spec に「項目|値」を1行ずつ(管理ページの「ガジェット」で入力できます)
     specEl.textContent = "";
-    var rows = 0;
+    var entries = [], cams = [];
     (card.dataset.spec || "").split("\n").forEach(function (line) {
       var p = line.indexOf("|");
       if (p < 0) return;
       var k = line.slice(0, p).trim(), v = line.slice(p + 1).trim();
       if (!k || !v) return;
-      var dt = document.createElement("dt"); dt.textContent = k;
-      var dd = document.createElement("dd"); dd.textContent = v;
-      specEl.appendChild(dt); specEl.appendChild(dd); rows++;
+      if (k === "カメラ") {                    // カメラは複数行ぶんを1つのタイルにまとめる(種類::内容)
+        var q = v.indexOf("::");
+        cams.push(q >= 0 ? { t: v.slice(0, q).trim(), c: v.slice(q + 2).trim() } : { t: "", c: v });
+        if (cams.length === 1) entries.push({ k: k, cam: true });
+      } else entries.push({ k: k, v: v });
     });
-    specEl.hidden = !rows;
+    entries.forEach(function (en) {
+      var tile = document.createElement("div");
+      var dt = document.createElement("dt"); dt.textContent = en.k;
+      var dd = document.createElement("dd");
+      if (en.cam && !(cams.length === 1 && !cams[0].t)) {
+        tile.className = "tile wide";
+        cams.forEach(function (cm) {
+          var r = document.createElement("div"); r.className = "cam";
+          if (cm.t) { var t = document.createElement("span"); t.className = "cam-t"; t.textContent = cm.t; r.appendChild(t); }
+          var c = document.createElement("span"); c.textContent = cm.c; r.appendChild(c);
+          dd.appendChild(r);
+        });
+      } else {
+        var val = en.cam ? cams[0].c : en.v;
+        dd.textContent = val;
+        tile.className = "tile" + (val.length > 16 || val.indexOf("\n") >= 0 ? " wide" : "");
+      }
+      tile.appendChild(dt); tile.appendChild(dd); specEl.appendChild(tile);
+    });
+    specEl.hidden = !entries.length;
     img.alt = nameEl.textContent + "の写真";
     img.onerror = function () {                 // 詳細用が無ければ普通の画像、それも無ければ絵文字
       if (mainSrc && img.getAttribute("src") !== mainSrc) img.src = mainSrc;
       else img.hidden = true;
     };
+    var ul = card.closest("ul"), h2 = ul ? ul.previousElementSibling : null;   // 「スマホ」「イヤホン」などの見出し
+    chipEl.textContent = h2 && /^H[1-6]$/.test(h2.tagName) ? h2.textContent.trim() : "";
+    chipEl.hidden = !chipEl.textContent;
+    img.classList.remove("on");
+    img.onload = function () { img.classList.add("on"); };
     img.hidden = false;
     img.removeAttribute("src");
     var first = detail || mainSrc;
@@ -140,10 +171,33 @@
   dlg.querySelector(".gd-close").addEventListener("click", function () { dlg.close(); });
   dlg.addEventListener("click", function (e) { if (e.target === dlg) dlg.close(); });   // 外側を押して閉じる
   dlg.addEventListener("close", function () {
+    dlg.style.transform = ""; dlg.style.transition = "";
     document.body.classList.remove("gd-open");
     if (history.state && history.state.gd) history.back();
   });
   window.addEventListener("popstate", function () { if (dlg.open) dlg.close(); });
+
+  // スマホ: 写真やつまみを下に引っぱって閉じる
+  var drag = null;
+  dlg.addEventListener("pointerdown", function (e) {
+    if (e.pointerType === "mouse" || dlg.scrollTop > 0 || !e.target.closest(".gd-photo, .gd-grip")) return;
+    drag = { y: e.clientY, dy: 0, id: e.pointerId };
+  });
+  dlg.addEventListener("pointermove", function (e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.dy = Math.max(0, e.clientY - drag.y);
+    dlg.style.transition = "none";
+    dlg.style.transform = "translateY(" + drag.dy + "px)";
+  });
+  function endDrag() {
+    if (!drag) return;
+    var dy = drag.dy; drag = null;
+    dlg.style.transition = "transform .2s ease";
+    dlg.style.transform = "";
+    if (dy > 100) dlg.close();
+  }
+  dlg.addEventListener("pointerup", endDrag);
+  dlg.addEventListener("pointercancel", endDrag);
 })();
 </script>
 <script src="menu.js?v=6"></script>

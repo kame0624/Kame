@@ -62,6 +62,7 @@
   #gList .t{flex:1 1 150px}
   #gList .tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:50px;border:1px solid var(--accent);color:var(--accent);font-size:11px;font-weight:400;vertical-align:middle}
   #gList .sec{display:block;color:var(--dim);font-size:11px}
+  .gcam-row{display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-top:8px}
   #wList .acts{flex-wrap:wrap}
   #wList li.off .t{opacity:.55}
   #wList .tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:50px;border:1px solid var(--accent);color:var(--accent);font-size:11px;font-weight:400;vertical-align:middle}
@@ -441,6 +442,8 @@
   }
   function friendly(e) {
     if (e.status === 401) return "トークンが無効です。設定で入れ直してください。";
+    if (e.status === 403 && /not accessible by personal access token/i.test(e.message || ""))
+      return "この端末のトークンには書き込み権限がありません。GitHubでトークンの「Contents」を「Read and write」にして、このリポジトリを選んだものを作り、設定で入れ直してください。(読み込みだけはできます)";
     if (e.status === 403 || e.status === 404) return "権限がないか見つかりません(" + e.message + ")。トークンの権限とリポジトリ名を確認してください。";
     if (e.status === 409 || e.status === 422) return "他の変更とぶつかりました。読み込み直してもう一度どうぞ。(" + e.message + ")";
     return e.message || String(e);
@@ -795,25 +798,42 @@
         '<button class="abtn" type="button" data-i="' + i + '">編集</button></div></li>';
     }).join("");
   }
-  function gSpecMap(spec) {
-    var map = {}, other = [];
+  var CAM_DEFAULT = ["メイン", "超広角", "望遠"];
+  // 「カメラ|種類::内容」は3つまで専用欄、それ以外の項目は「その他」に残す
+  function gSplit(spec, fields) {
+    var map = {}, cams = [], other = [];
     spec.split("\n").forEach(function (line) {
-      var p = line.indexOf("|"); if (p < 0) { if (line.trim()) other.push(line); return; }
+      line = line.trim(); if (!line) return;
+      var p = line.indexOf("|");
+      if (p < 0) { other.push(line); return; }
       var k = line.slice(0, p).trim(), v = line.slice(p + 1).trim();
-      if (k) map[k] = v;
+      if (k === "カメラ" && fields.indexOf("カメラ") >= 0 && cams.length < 3) {
+        var q = v.indexOf("::");
+        cams.push(q >= 0 ? { t: v.slice(0, q).trim(), c: v.slice(q + 2).trim() } : { t: "", c: v });
+      } else if (k !== "カメラ" && fields.indexOf(k) >= 0 && map[k] === undefined) {
+        map[k] = v;
+      } else other.push(line);
     });
-    return map;
+    return { map: map, cams: cams, other: other };
   }
   function gOpen(i) {
-    var it = gd.items[i], fields = gFields(it.sec), map = gSpecMap(it.spec), other = [];
+    var it = gd.items[i], fields = gFields(it.sec), sp = gSplit(it.spec, fields);
     gd.edit = i;
     $("gHead").textContent = it.name + " を編集";
     $("gDetail").value = it.detail;
     $("gFields").innerHTML = fields.map(function (f, n) {
-      return '<label for="gf' + n + '">' + esc(f) + '</label><input type="text" id="gf' + n + '" data-k="' + esc(f) + '" value="' + esc(map[f] || "") + '" autocomplete="off">';
+      if (f === "カメラ") {
+        var rows = "";
+        for (var j = 0; j < 3; j++) {
+          var cm = sp.cams[j] || { t: "", c: "" };
+          rows += '<div class="gcam-row"><input type="text" data-ct placeholder="' + CAM_DEFAULT[j] + '" value="' + esc(cm.t) + '" autocomplete="off">' +
+            '<input type="text" data-cc placeholder="50MP f/1.6 OIS" value="' + esc(cm.c) + '" autocomplete="off"></div>';
+        }
+        return '<div class="gcam"><label>カメラ(最大3つ。左が種類、右が内容)</label>' + rows + "</div>";
+      }
+      return '<label for="gf' + n + '">' + esc(f) + '</label><input type="text" id="gf' + n + '" data-k="' + esc(f) + '" value="' + esc(sp.map[f] || "") + '" autocomplete="off">';
     }).join("");
-    Object.keys(map).forEach(function (k) { if (fields.indexOf(k) < 0) other.push(k + "|" + map[k]); });
-    $("gOther").value = other.join("\n");
+    $("gOther").value = sp.other.join("\n");
     $("gForm").hidden = false;
     $("gHead").scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -832,9 +852,18 @@
   $("gApply").onclick = function () {
     var it = gd.items[gd.edit]; if (!it) return;
     var lines = [];
-    Array.prototype.forEach.call($("gFields").querySelectorAll("input[data-k]"), function (inp) {
-      var v = inp.value.trim().replace(/\|/g, "/");
-      if (v) lines.push(inp.dataset.k + "|" + v);
+    Array.prototype.forEach.call($("gFields").querySelectorAll("input[data-k], .gcam"), function (el) {
+      if (el.classList.contains("gcam")) {
+        Array.prototype.forEach.call(el.querySelectorAll(".gcam-row"), function (r, j) {
+          var c = r.querySelector("[data-cc]").value.trim().replace(/\|/g, "/").replace(/::/g, ":");
+          if (!c) return;
+          var t = (r.querySelector("[data-ct]").value.trim() || CAM_DEFAULT[j]).replace(/[|:：]/g, "");
+          lines.push("カメラ|" + t + "::" + c);
+        });
+        return;
+      }
+      var v = el.value.trim().replace(/\|/g, "/");
+      if (v) lines.push(el.dataset.k + "|" + v);
     });
     $("gOther").value.split("\n").forEach(function (l) { if (l.trim() && l.indexOf("|") > 0) lines.push(l.trim()); });
     it.detail = $("gDetail").value.trim();
