@@ -11,8 +11,7 @@
     { href: "https://x.com/Kamekun242", label: "X (Twitter)", ext: true },
     { href: "https://maiscore.net/user/kameeeee", label: "maiscore", ext: true },
     "-",
-    { href: "admin.html",       label: "管理",       page: "admin.html" },
-    { href: "favorites.html",   label: "好きなもの", page: "favorites.html" }
+    { href: "admin.html",       label: "管理",       page: "admin.html" }
   ];
 
   var current = location.pathname.split("/").pop() || "index.html";
