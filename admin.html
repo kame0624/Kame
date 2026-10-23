@@ -347,15 +347,17 @@
       <input type="text" id="sBranch" value="main" autocapitalize="off" spellcheck="false">
       <label for="sToken">GitHubアクセストークン</label>
       <input type="password" id="sToken" placeholder="github_pat_..." autocomplete="off">
-      <label for="sPw">パスワード(8文字以上)</label>
-      <input type="password" id="sPw" placeholder="新しく決める・変えるときだけ入力" autocomplete="new-password">
-      <p class="hint">パスワードでトークンを暗号化して、この端末に保存します。管理ページを開くたびにパスワードが必要で、15分操作しないと自動でロックされます。</p>
+      <label for="sPw">パスワード(任意・8文字以上)</label>
+      <input type="password" id="sPw" placeholder="なしでもOK。決める・変えるときだけ入力" autocomplete="new-password">
+      <p class="hint" id="sPwState"></p>
+      <p class="hint">パスワードは任意です。決めると、トークンを暗号化してこの端末に保存し、管理ページを開くたびにパスワードが必要になります(15分操作しないと自動でロック)。決めないと、トークンはこの端末にそのまま保存されます。</p>
       <p class="hint">トークンはこの端末のブラウザ内にだけ保存され、GitHub以外には送られません。<br>
       作り方: GitHub → Settings → Developer settings → Fine-grained tokens → Generate。
       Repository access は <b>Kame だけ</b>、Permissions の <b>Contents を Read and write</b> にしてください。</p>
       <div class="row">
         <button class="abtn main" type="button" id="sSave">保存して接続テスト</button>
-        <button class="abtn" type="button" id="sLock">今すぐロック</button>
+        <button class="abtn" type="button" id="sLock" hidden>今すぐロック</button>
+        <button class="abtn" type="button" id="sNoPw" hidden>パスワードをやめる</button>
         <button class="abtn danger" type="button" id="sClear">トークンを消す</button>
       </div>
     </div>
@@ -482,17 +484,16 @@
   $("sSave").onclick = function () {
     var b = this;
     var token = $("sToken").value.trim(), pw = $("sPw").value || sessionPw;
-    if (token) {
-      if (!pw) { say("パスワードを決めてください(トークンを暗号化して保存します)", "err"); return; }
-      if (pw.length < MIN_PW) { say("パスワードは" + MIN_PW + "文字以上にしてください", "err"); return; }
-    }
+    if (token && pw && pw.length < MIN_PW) { say("パスワードは" + MIN_PW + "文字以上にしてください(なしでもかまいません)", "err"); return; }
     cfg.repo = $("sRepo").value.trim(); cfg.branch = $("sBranch").value.trim() || "main";
     busy(b, true);
     var ready = token
-      ? encryptToken(token, pw).then(function (o) { cfg.token = token; cfg.tokenEnc = o; sessionPw = pw; $("sPw").value = ""; })
+      ? (pw
+          ? encryptToken(token, pw).then(function (o) { cfg.token = token; cfg.tokenEnc = o; sessionPw = pw; $("sPw").value = ""; })
+          : Promise.resolve().then(function () { cfg.token = token; cfg.tokenEnc = null; sessionPw = ""; }))   // パスワードなし: そのまま保存
       : Promise.resolve().then(function () { cfg.token = ""; cfg.tokenEnc = null; sessionPw = ""; });
     ready.then(function () {
-      persist(); resetIdle();
+      persist(); resetIdle(); pwUi();
       return api("");
     }).then(function (j) {
       var canPush = j.permissions && j.permissions.push;
@@ -501,12 +502,25 @@
   };
   $("sClear").onclick = function () {
     cfg.token = ""; cfg.tokenEnc = null; sessionPw = ""; $("sToken").value = ""; $("sPw").value = "";
-    persist(); say("トークンとパスワードを消しました", "ok");
+    persist(); pwUi(); say("トークンとパスワードを消しました", "ok");
   };
   $("sLock").onclick = function () {
-    if (!cfg.tokenEnc) { say("パスワードを決めて保存すると、ロックできます", "err"); return; }
+    if (!cfg.tokenEnc) { say("パスワードを決めていないので、ロックできません", "err"); return; }
     lockNow();
   };
+  // パスワードをやめる(トークンはそのまま使える。この端末には暗号化なしで保存される)
+  $("sNoPw").onclick = function () {
+    if (!cfg.tokenEnc || !cfg.token) return;
+    if (!confirm("パスワードをやめます。\nトークンは暗号化されずに、この端末にそのまま保存されます。よろしいですか?")) return;
+    cfg.tokenEnc = null; sessionPw = ""; persist(); clearTimeout(idleTimer); pwUi();
+    say("パスワードをやめました", "ok");
+  };
+  function pwUi() {
+    var on = !!cfg.tokenEnc;
+    $("sLock").hidden = !on; $("sNoPw").hidden = !on;
+    $("sPwState").textContent = on ? "いまの状態: パスワードあり(トークンは暗号化して保存中)" : (cfg.token ? "いまの状態: パスワードなし(トークンをそのまま保存中)" : "いまの状態: トークン未設定");
+  }
+  pwUi();
 
   /* ---------- ブログ ---------- */
   var BLOG = "blog.html";
@@ -1340,11 +1354,10 @@
     var h = location.hash.slice(1);
     go(cfg.token ? (tabs.indexOf(h) >= 0 ? h : "post") : "set");
     if (!cfg.token) say("最初にGitHubのトークンを設定してください", "");
-    resetIdle();
+    resetIdle(); pwUi();
   }
-  if (cfg.tokenEnc && !cfg.token) showLock("unlock");
-  else if (cfg.token && !cfg.tokenEnc) showLock("setup");   // 今までのトークンを、パスワードで暗号化する
-  else start();
+  if (cfg.tokenEnc && !cfg.token) showLock("unlock");   // パスワードを決めている人だけ、解除を求める
+  else start();                                          // パスワードなしなら、そのまま開く
 })();
 </script>
 </body>
