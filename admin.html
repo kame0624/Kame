@@ -58,6 +58,9 @@
   #wList .glass{flex-wrap:wrap}
   #wList .t{flex:1 1 160px}
   #wList .abtn:disabled{opacity:.3}
+  #wList .acts{flex-wrap:wrap}
+  #wList li.off .t{opacity:.55}
+  #wList .tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:50px;border:1px solid var(--accent);color:var(--accent);font-size:11px;font-weight:400;vertical-align:middle}
   code{background:rgba(255,255,255,.1);padding:1px 6px;border-radius:6px;font-size:.9em}
 </style>
 </head>
@@ -124,6 +127,7 @@
       <input type="text" id="wName" placeholder="アプリの名前" autocomplete="off">
       <label for="wDesc">説明</label>
       <input type="text" id="wDesc" placeholder="どんなものか、一言で" autocomplete="off">
+      <label class="chk"><input type="checkbox" id="wHide"> 非表示にする(ページには出ません)</label>
       <div class="row">
         <button class="abtn main" type="button" id="wAdd">追加する</button>
         <button class="abtn" type="button" id="wCancel" hidden>編集をやめる</button>
@@ -568,30 +572,34 @@
   function wParse(text) {
     var m = text.match(UL_RE);
     if (!m) throw new Error('works.html に一覧(<ul class="list">)が見つかりません。ページ編集で確認してください');
-    return (m[2].match(/<li\b[\s\S]*?<\/li>/g) || []).map(function (html) {
+    // 非表示の項目は <!-- kame-hidden: <li>…</li> --> の形でページに残してある
+    return (m[2].match(/<!--\s*kame-hidden:\s*<li\b[\s\S]*?<\/li>\s*-->|<li\b[\s\S]*?<\/li>/g) || []).map(function (raw) {
+      var hid = raw.indexOf("<!--") === 0;
+      var html = hid ? raw.replace(/^<!--\s*kame-hidden:\s*/, "").replace(/\s*-->$/, "") : raw;
       var d = new DOMParser().parseFromString(html, "text/html");
       var b = d.querySelector("b"), sp = d.querySelector("span");
-      return { html: html.trim(), name: (b ? b.textContent : d.body.textContent).trim(), desc: sp ? sp.textContent.trim() : "" };
+      return { html: html.trim(), name: (b ? b.textContent : d.body.textContent).trim(), desc: sp ? sp.textContent.trim() : "", hidden: hid };
     });
   }
   function wBuild(text, items) {
     return text.replace(UL_RE, function (all, open, inner, close) {
-      return open + "\n" + items.map(function (it) { return "    " + it.html; }).join("\n") + (items.length ? "\n  " : "  ") + close;
+      return open + "\n" + items.map(function (it) { return "    " + (it.hidden ? "<!-- kame-hidden: " + it.html.replace(/--/g, "-&#45;") + " -->" : it.html); }).join("\n") + (items.length ? "\n  " : "  ") + close;
     });
   }
   function wRender() {
     var ul = $("wList");
     if (!w.items.length) { ul.innerHTML = '<li class="hint">まだありません</li>'; return; }
     ul.innerHTML = w.items.map(function (it, i) {
-      return '<li class="glass"><div class="t"><b>' + esc(it.name) + "</b><span>" + esc(it.desc) + '</span></div><div class="acts">' +
+      return '<li class="glass' + (it.hidden ? " off" : "") + '"><div class="t"><b>' + esc(it.name) + (it.hidden ? '<span class="tag">非表示</span>' : "") + "</b><span>" + esc(it.desc) + '</span></div><div class="acts">' +
         '<button class="abtn" type="button" data-a="up" data-i="' + i + '" aria-label="上へ"' + (i === 0 ? " disabled" : "") + ">↑</button>" +
         '<button class="abtn" type="button" data-a="down" data-i="' + i + '" aria-label="下へ"' + (i === w.items.length - 1 ? " disabled" : "") + ">↓</button>" +
         '<button class="abtn" type="button" data-a="edit" data-i="' + i + '">編集</button>' +
+        '<button class="abtn" type="button" data-a="vis" data-i="' + i + '">' + (it.hidden ? "表示する" : "非表示") + "</button>" +
         '<button class="abtn danger" type="button" data-a="del" data-i="' + i + '">削除</button></div></li>';
     }).join("");
   }
   function wReset() {
-    w.edit = -1; $("wName").value = ""; $("wDesc").value = "";
+    w.edit = -1; $("wName").value = ""; $("wDesc").value = ""; $("wHide").checked = false;
     $("wHead").textContent = "追加する"; $("wAdd").textContent = "追加する"; $("wCancel").hidden = true;
   }
   function loadWorks(force) {
@@ -605,11 +613,14 @@
   $("wAdd").onclick = function () {
     var name = $("wName").value.trim(), desc = $("wDesc").value.trim();
     if (!name) { say("名前を入れてください", "err"); return; }
+    var hide = $("wHide").checked;
     if (w.edit >= 0) {
       var old = w.items[w.edit];
-      if (old.name !== name || old.desc !== desc) w.items[w.edit] = { html: wLi(name, desc), name: name, desc: desc };
+      w.items[w.edit] = (old.name !== name || old.desc !== desc)
+        ? { html: wLi(name, desc), name: name, desc: desc, hidden: hide }
+        : { html: old.html, name: old.name, desc: old.desc, hidden: hide };
     } else {
-      w.items.push({ html: wLi(name, desc), name: name, desc: desc });
+      w.items.push({ html: wLi(name, desc), name: name, desc: desc, hidden: hide });
     }
     say((w.edit >= 0 ? "更新" : "追加") + "しました(まだ保存していません)", "ok");
     wReset(); wMark(true); wRender();
@@ -623,8 +634,11 @@
       var t = w.items[i]; w.items[i] = w.items[j]; w.items[j] = t;
       if (w.edit === i) w.edit = j; else if (w.edit === j) w.edit = i;
       wMark(true); wRender();
+    } else if (a === "vis") {
+      it.hidden = !it.hidden; wMark(true); wRender();
+      say("「" + it.name + "」を" + (it.hidden ? "非表示" : "表示") + "にしました(まだ保存していません)", "ok");
     } else if (a === "edit") {
-      w.edit = i; $("wName").value = it.name; $("wDesc").value = it.desc;
+      w.edit = i; $("wName").value = it.name; $("wDesc").value = it.desc; $("wHide").checked = !!it.hidden;
       $("wHead").textContent = "編集する"; $("wAdd").textContent = "更新する"; $("wCancel").hidden = false;
       $("wHead").scrollIntoView({ behavior: "smooth", block: "start" });
     } else if (confirm("「" + it.name + "」を削除しますか?")) {
