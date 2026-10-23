@@ -189,18 +189,13 @@ p{margin:0 0 12px}
 .hist-chart svg{display:block;width:100%;height:auto;overflow:visible}
 
 /* ---- ページ切り替えのアニメーション ----
-   背景・左上のサイト名・右上のメニューはそのまま残して、本文だけがふわっと入れ替わる。
-   (Chrome / Safari の「ページ間トランジション」を使用。動きを減らす設定の人には出さない) */
+   ページ全体がふわっと入れ替わる(Chrome / Safari の「ページ間トランジション」を使用)。
+   注意: .menu や .brand に view-transition-name を付けると、中のすりガラス(backdrop-filter)が効かなくなるので付けないこと。
+   動きを減らす設定の人には出さない */
 @media (prefers-reduced-motion: no-preference) {
   @view-transition { navigation: auto; }
-  .bg { view-transition-name: kame-bg; }
-  .brand { view-transition-name: kame-brand; }
-  .menu { view-transition-name: kame-menu; }
-  ::view-transition-old(kame-bg), ::view-transition-new(kame-bg),
-  ::view-transition-old(kame-brand), ::view-transition-new(kame-brand),
-  ::view-transition-old(kame-menu), ::view-transition-new(kame-menu) { animation: none; mix-blend-mode: normal; }
-  ::view-transition-old(root) { animation: kame-out .14s ease-in both; }
-  ::view-transition-new(root) { animation: kame-in .3s cubic-bezier(.2,.7,.2,1) both; }
+  ::view-transition-old(root) { animation: kame-out .12s ease-in both; }
+  ::view-transition-new(root) { animation: kame-in .26s ease-out both; }
 }
-@keyframes kame-out { to { opacity: 0; transform: translateY(-6px); } }
-@keyframes kame-in { from { opacity: 0; transform: translateY(12px); } }
+@keyframes kame-out { to { opacity: 0; } }
+@keyframes kame-in { from { opacity: 0; } }

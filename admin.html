@@ -61,11 +61,32 @@
   #wList .acts{flex-wrap:wrap}
   #wList li.off .t{opacity:.55}
   #wList .tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:50px;border:1px solid var(--accent);color:var(--accent);font-size:11px;font-weight:400;vertical-align:middle}
+  #lock{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:20px;background:rgba(11,11,16,.9);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+  #lock[hidden]{display:none}
+  .lock-card{width:min(420px,100%)}
   code{background:rgba(255,255,255,.1);padding:1px 6px;border-radius:6px;font-size:.9em}
 </style>
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
+<div id="lock" hidden role="dialog" aria-modal="true" aria-labelledby="lockTitle">
+  <div class="glass lock-card">
+    <h2 id="lockTitle" style="margin:0 0 6px">管理</h2>
+    <p class="hint" id="lockMsg" style="margin:0"></p>
+    <label for="lockPw">パスワード</label>
+    <input type="password" id="lockPw" autocomplete="current-password">
+    <div id="lockPw2Wrap" hidden>
+      <label for="lockPw2">もう一度</label>
+      <input type="password" id="lockPw2" autocomplete="new-password">
+    </div>
+    <p class="hint" id="lockErr" style="color:#ff8f8f" hidden></p>
+    <div class="row">
+      <button class="abtn main" type="button" id="lockGo">ロック解除</button>
+      <button class="abtn" type="button" id="lockSkip" hidden>あとで</button>
+    </div>
+    <p class="hint"><a href="#" id="lockForgot">パスワードを忘れた</a></p>
+  </div>
+</div>
 <main>
   <h1 class="sub">管理</h1>
   <p class="lead" style="font-size:14px">保存するとGitHubに直接コミットされます。反映まで1〜2分かかります。</p>
@@ -289,11 +310,15 @@
       <input type="text" id="sBranch" value="main" autocapitalize="off" spellcheck="false">
       <label for="sToken">GitHubアクセストークン</label>
       <input type="password" id="sToken" placeholder="github_pat_..." autocomplete="off">
+      <label for="sPw">パスワード(8文字以上)</label>
+      <input type="password" id="sPw" placeholder="新しく決める・変えるときだけ入力" autocomplete="new-password">
+      <p class="hint">パスワードでトークンを暗号化して、この端末に保存します。管理ページを開くたびにパスワードが必要で、15分操作しないと自動でロックされます。</p>
       <p class="hint">トークンはこの端末のブラウザ内にだけ保存され、GitHub以外には送られません。<br>
       作り方: GitHub → Settings → Developer settings → Fine-grained tokens → Generate。
       Repository access は <b>Kame だけ</b>、Permissions の <b>Contents を Read and write</b> にしてください。</p>
       <div class="row">
         <button class="abtn main" type="button" id="sSave">保存して接続テスト</button>
+        <button class="abtn" type="button" id="sLock">今すぐロック</button>
         <button class="abtn danger" type="button" id="sClear">トークンを消す</button>
       </div>
     </div>
@@ -406,17 +431,42 @@
 
   /* ---------- 設定 ---------- */
   $("sRepo").value = cfg.repo; $("sBranch").value = cfg.branch; $("sToken").value = cfg.token;
-  function persist() { try { localStorage.setItem(LS, JSON.stringify(cfg)); } catch (e) {} }
+  function persist() {
+    try {
+      var o = { repo: cfg.repo, branch: cfg.branch };
+      if (cfg.tokenEnc) o.tokenEnc = cfg.tokenEnc;      // パスワード設定済み: 暗号化したトークンだけ保存
+      else if (cfg.token) o.token = cfg.token;          // 未設定(古い状態): そのまま
+      localStorage.setItem(LS, JSON.stringify(o));
+    } catch (e) {}
+  }
   $("sSave").onclick = function () {
-    cfg.repo = $("sRepo").value.trim(); cfg.branch = $("sBranch").value.trim() || "main"; cfg.token = $("sToken").value.trim();
-    persist(); busy(this, true);
     var b = this;
-    api("").then(function (j) {
+    var token = $("sToken").value.trim(), pw = $("sPw").value || sessionPw;
+    if (token) {
+      if (!pw) { say("パスワードを決めてください(トークンを暗号化して保存します)", "err"); return; }
+      if (pw.length < MIN_PW) { say("パスワードは" + MIN_PW + "文字以上にしてください", "err"); return; }
+    }
+    cfg.repo = $("sRepo").value.trim(); cfg.branch = $("sBranch").value.trim() || "main";
+    busy(b, true);
+    var ready = token
+      ? encryptToken(token, pw).then(function (o) { cfg.token = token; cfg.tokenEnc = o; sessionPw = pw; $("sPw").value = ""; })
+      : Promise.resolve().then(function () { cfg.token = ""; cfg.tokenEnc = null; sessionPw = ""; });
+    ready.then(function () {
+      persist(); resetIdle();
+      return api("");
+    }).then(function (j) {
       var canPush = j.permissions && j.permissions.push;
       say(canPush ? "接続OK: " + j.full_name + " に書き込めます" : "接続はできましたが書き込み権限がありません(Contents: Read and write を確認)", canPush ? "ok" : "err");
     }).catch(function (e) { say(friendly(e), "err"); }).then(function () { busy(b, false); });
   };
-  $("sClear").onclick = function () { cfg.token = ""; $("sToken").value = ""; persist(); say("トークンを消しました", "ok"); };
+  $("sClear").onclick = function () {
+    cfg.token = ""; cfg.tokenEnc = null; sessionPw = ""; $("sToken").value = ""; $("sPw").value = "";
+    persist(); say("トークンとパスワードを消しました", "ok");
+  };
+  $("sLock").onclick = function () {
+    if (!cfg.tokenEnc) { say("パスワードを決めて保存すると、ロックできます", "err"); return; }
+    lockNow();
+  };
 
   /* ---------- ブログ ---------- */
   var BLOG = "blog.html";
@@ -1027,10 +1077,96 @@
   };
   installInit();
 
+  /* ---------- パスワードロック(トークンを暗号化して保存) ---------- */
+  var sessionPw = "";                       // 解除中だけメモリに持つ(保存しない)
+  var ITER = 310000, MIN_PW = 8, IDLE_MIN = 15;
+  var te = new TextEncoder();
+  function b64(u8) { var t = ""; for (var i = 0; i < u8.length; i++) t += String.fromCharCode(u8[i]); return btoa(t); }
+  function unb64(t) { var r = atob(t), u = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) u[i] = r.charCodeAt(i); return u; }
+  function deriveKey(pw, salt, iter) {
+    return crypto.subtle.importKey("raw", te.encode(pw), "PBKDF2", false, ["deriveKey"]).then(function (base) {
+      return crypto.subtle.deriveKey({ name: "PBKDF2", salt: salt, iterations: iter, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    });
+  }
+  function encryptToken(token, pw) {
+    var salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+    return deriveKey(pw, salt, ITER).then(function (key) {
+      return crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, te.encode(token));
+    }).then(function (ct) { return { v: 1, iter: ITER, salt: b64(salt), iv: b64(iv), ct: b64(new Uint8Array(ct)) }; });
+  }
+  function decryptToken(o, pw) {
+    return deriveKey(pw, unb64(o.salt), o.iter).then(function (key) {
+      return crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(o.iv) }, key, unb64(o.ct));
+    }).then(function (pt) { return new TextDecoder().decode(pt); });
+  }
+
+  var lockMode = "", fails = 0, idleTimer;
+  function showLock(mode) {
+    lockMode = mode;
+    var setup = mode === "setup";
+    document.querySelector("main").hidden = true;
+    $("lock").hidden = false;
+    $("lockMsg").textContent = setup ? "トークンを暗号化して保存するための、パスワードを決めてください(" + MIN_PW + "文字以上)。" : "パスワードを入れてください。";
+    $("lockPw").autocomplete = setup ? "new-password" : "current-password";
+    $("lockPw2Wrap").hidden = !setup; $("lockSkip").hidden = !setup; $("lockForgot").parentNode.hidden = setup;
+    $("lockGo").textContent = setup ? "パスワードを決める" : "ロック解除";
+    $("lockPw").value = ""; $("lockPw2").value = ""; $("lockErr").hidden = true;
+    setTimeout(function () { $("lockPw").focus(); }, 50);
+  }
+  function hideLock() { $("lock").hidden = true; document.querySelector("main").hidden = false; }
+  function lockErr(t) { var e = $("lockErr"); e.textContent = t; e.hidden = false; }
+  function lockNow() {
+    if (!cfg.tokenEnc) return;
+    cfg.token = ""; sessionPw = ""; $("sToken").value = ""; $("sPw").value = "";
+    clearTimeout(idleTimer); showLock("unlock");
+  }
+  function resetIdle() {
+    clearTimeout(idleTimer);
+    if (cfg.tokenEnc && cfg.token) idleTimer = setTimeout(lockNow, IDLE_MIN * 60000);
+  }
+  ["pointerdown", "keydown", "scroll"].forEach(function (ev) { document.addEventListener(ev, resetIdle, { passive: true }); });
+
+  $("lockGo").onclick = function () {
+    var pw = $("lockPw").value, btn = this;
+    if (lockMode === "setup") {
+      if (pw.length < MIN_PW) { lockErr("パスワードは" + MIN_PW + "文字以上にしてください"); return; }
+      if (pw !== $("lockPw2").value) { lockErr("2回の入力が合いません"); return; }
+      busy(btn, true);
+      encryptToken(cfg.token, pw).then(function (o) {
+        cfg.tokenEnc = o; sessionPw = pw; persist(); hideLock(); start();
+        say("トークンを暗号化して保存しました", "ok");
+      }).catch(function () { lockErr("暗号化できませんでした(HTTPSで開いているか確認してください)"); })
+        .then(function () { busy(btn, false); });
+    } else {
+      if (!pw) return;
+      busy(btn, true);
+      decryptToken(cfg.tokenEnc, pw).then(function (t) {
+        cfg.token = t; sessionPw = pw; fails = 0; $("sToken").value = t; busy(btn, false); hideLock(); start();
+      }, function () {
+        fails++; lockErr("パスワードが違います");
+        setTimeout(function () { busy(btn, false); }, Math.min(fails, 10) * 1000);   // 間違えるほど待ち時間が増える
+      });
+    }
+  };
+  $("lockPw").addEventListener("keydown", function (e) { if (e.key === "Enter" && lockMode === "unlock") $("lockGo").click(); });
+  $("lockPw2").addEventListener("keydown", function (e) { if (e.key === "Enter") $("lockGo").click(); });
+  $("lockSkip").onclick = function () { hideLock(); start(); };
+  $("lockForgot").onclick = function (e) {
+    e.preventDefault();
+    if (!confirm("保存しているトークンを消して、最初から設定し直します。\nGitHubのトークンは入れ直しになります。よろしいですか?")) return;
+    cfg.token = ""; cfg.tokenEnc = null; sessionPw = ""; persist(); hideLock(); start();
+  };
+
   /* ---------- 起動 ---------- */
-  var h = location.hash.slice(1);
-  go(cfg.token ? (tabs.indexOf(h) >= 0 ? h : "post") : "set");
-  if (!cfg.token) say("最初にGitHubのトークンを設定してください", "");
+  function start() {
+    var h = location.hash.slice(1);
+    go(cfg.token ? (tabs.indexOf(h) >= 0 ? h : "post") : "set");
+    if (!cfg.token) say("最初にGitHubのトークンを設定してください", "");
+    resetIdle();
+  }
+  if (cfg.tokenEnc && !cfg.token) showLock("unlock");
+  else if (cfg.token && !cfg.tokenEnc) showLock("setup");   // 今までのトークンを、パスワードで暗号化する
+  else start();
 })();
 </script>
 </body>
