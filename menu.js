@@ -4,16 +4,15 @@
   var ITEMS = [
     { href: "index.html#top",   label: "ホーム",     page: "index.html" },
     { href: "index.html#about", label: "自己紹介" },
-    { href: "index.html#works", label: "作ったもの" },
     { href: "blog.html",        label: "ブログ",     page: "blog.html" },
     { href: "maimai.html",      label: "maimai",     page: "maimai.html" },
-    { href: "favorites.html",   label: "好きなもの", page: "favorites.html" },
     { href: "gadgets.html",     label: "ガジェット", page: "gadgets.html" },
     "-",
     { href: "https://x.com/Kamekun242", label: "X (Twitter)", ext: true },
     { href: "https://maiscore.net/user/kameeeee", label: "maiscore", ext: true },
     "-",
-    { href: "admin.html",       label: "管理",       page: "admin.html" }
+    { href: "admin.html",       label: "管理",       page: "admin.html" },
+    { href: "favorites.html",   label: "好きなもの", page: "favorites.html" }
   ];
 
   var current = location.pathname.split("/").pop() || "index.html";
