@@ -10,54 +10,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<style>
-/* ガジェット詳細ポップアップ(このページだけで完結。style.css の版が違っても崩れないよう、強めのセレクタにしてある) */
-html.gd-ready .gadget-card{cursor:pointer;-webkit-tap-highlight-color:transparent}
-html.gd-ready .gadget-card::after{content:"›";flex:none;margin-left:auto;padding-left:4px;font-size:26px;line-height:1;color:var(--dim)}
-html.gd-ready .gadget-card:active{filter:brightness(1.15)}
-body.gd-open{overflow:hidden}
-
-dialog.gd{width:min(520px,calc(100% - 40px));max-height:92dvh;margin:auto;padding:0;overflow:auto;overscroll-behavior:contain;border:1px solid rgba(255,255,255,.22);border-radius:30px;background:rgba(16,16,24,.92);-webkit-backdrop-filter:blur(26px) saturate(1.3);backdrop-filter:blur(26px) saturate(1.3);color:var(--text);box-shadow:0 30px 80px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.14);scrollbar-width:none}
-dialog.gd::-webkit-scrollbar{display:none}
-dialog.gd::backdrop{background:rgba(4,4,10,.62);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
-dialog.gd .gd-photo{position:relative;aspect-ratio:1/1;max-height:50dvh;width:100%;display:grid;place-items:center;overflow:hidden;touch-action:none;background:linear-gradient(135deg,rgba(106,91,255,.75),rgba(46,230,182,.6))}
-dialog.gd .gd-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transform:scale(1.04);transition:opacity .35s ease,transform .5s ease}
-dialog.gd .gd-photo img.on{opacity:1;transform:none}
-dialog.gd .gd-photo::after{content:"";position:absolute;inset:auto 0 0 0;height:62%;background:linear-gradient(to top,rgba(16,16,24,.96) 4%,rgba(16,16,24,.55) 52%,transparent)}
-dialog.gd .gd-fallback{font-size:72px;line-height:1;filter:drop-shadow(0 6px 16px rgba(0,0,0,.35))}
-dialog.gd .gd-title{position:absolute;left:22px;right:22px;bottom:14px;z-index:1}
-dialog.gd .gd-title h3{margin:6px 0 0;font-size:clamp(22px,6.4vw,30px);line-height:1.3;font-weight:900;letter-spacing:-.01em;text-shadow:0 2px 14px rgba(0,0,0,.55);overflow-wrap:break-word}
-dialog.gd .gd-chip{display:inline-block;padding:3px 12px;border-radius:50px;font-size:12px;font-weight:700;color:var(--text);background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
-dialog.gd .gd-chip[hidden]{display:none}
-dialog.gd .gd-grip{position:absolute;top:8px;left:50%;z-index:3;width:42px;height:5px;margin-left:-21px;border-radius:5px;background:rgba(255,255,255,.55);box-shadow:0 1px 6px rgba(0,0,0,.4);touch-action:none}
-dialog.gd .gd-close{position:absolute;top:14px;right:14px;z-index:3;width:42px;height:42px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.42);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:#fff;font-size:16px;cursor:pointer}
-dialog.gd .gd-body{padding:4px 22px calc(26px + env(safe-area-inset-bottom))}
-dialog.gd .gd-body p{margin:0;color:rgba(243,241,238,.88);font-size:15px;line-height:1.9;white-space:pre-line;overflow-wrap:break-word}
-dialog.gd .gd-body p:empty{display:none}
-
-/* スペック: 2列のタイル。長いものとカメラは横いっぱい */
-dialog.gd .gd-spec{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:18px 0 0;padding:0;width:100%}
-dialog.gd .gd-spec[hidden]{display:none}
-dialog.gd .gd-spec .tile{box-sizing:border-box;min-width:0;padding:12px 14px;border-radius:18px;background:linear-gradient(135deg,rgba(255,255,255,.1),rgba(255,255,255,.04));border:1px solid rgba(255,255,255,.14)}
-dialog.gd .gd-spec .tile.wide{grid-column:1/-1}
-dialog.gd .gd-spec dt{margin:0 0 3px;color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.08em;line-height:1.5;white-space:normal}
-dialog.gd .gd-spec dd{margin:0;min-width:0;font-size:15px;font-weight:700;line-height:1.6;white-space:pre-line;overflow-wrap:break-word;word-break:normal}
-dialog.gd .gd-spec .cam{display:flex;align-items:baseline;gap:12px;padding:5px 0;min-width:0}
-dialog.gd .gd-spec .cam + .cam{border-top:1px solid rgba(255,255,255,.1)}
-dialog.gd .gd-spec .cam-t{flex:none;width:4.6em;font-size:12px;font-weight:700;color:var(--dim)}
-dialog.gd .gd-spec .cam span:last-child{flex:1 1 0;min-width:0}
-
-@media (max-width:640px){
-  dialog.gd{width:100%;margin:auto auto 0;border-radius:30px 30px 0 0;border-bottom:0;max-height:94dvh}
-}
-@media (prefers-reduced-motion:no-preference){
-  dialog.gd[open]{animation:gdIn .26s cubic-bezier(.2,.85,.25,1)}
-  dialog.gd[open]::backdrop{animation:gdFade .26s ease-out}
-  @keyframes gdIn{from{opacity:0;transform:translateY(24px) scale(.97)}}
-  @media (max-width:640px){dialog.gd[open]{animation-name:gdSheet}@keyframes gdSheet{from{transform:translateY(100%)}}}
-  @keyframes gdFade{from{opacity:0}}
-}
-</style>
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -71,11 +23,11 @@ dialog.gd .gd-spec .cam span:last-child{flex:1 1 0;min-width:0}
        どちらも管理ページの「ガジェット」タブから入力できます。 -->
   <h2>スマホ</h2>
   <ul class="list gadget-list">
-    <li class="glass gadget-card">
+    <li class="glass gadget-card" data-spec="SoC|Mediatek Dimensity 9400&#10;カメラ|メイン::50MP f1.75 1/1.28 OIS&#10;カメラ|超広角::50MP f/2.57 1/1.95&#10;カメラ|望遠::50MP f/2.0 1/2.76&#10;ディスプレイ|6.31インチ　LTPO OLED&#10;メモリ/ストレージ|12/256&#10;バッテリー|5700mAh">
       <div class="gadget-photo"><span class="gadget-fallback" aria-hidden="true">📱</span><img src="gadgets/vivo-x200-pro-mini.jpg" alt="Vivo X200 Pro mini" loading="lazy" onerror="this.remove()"></div>
       <div class="gadget-info"><b>Vivo X200 Pro mini</b><span>カメラと性能が素晴らしい。</span></div>
     </li>
-    <li class="glass gadget-card">
+    <li class="glass gadget-card" data-spec="SoC|Apple A15 Bionic&#10;カメラ|メイン::12MP&#10;カメラ|超広角::12MP&#10;ディスプレイ|5.4インチ&#10;メモリ/ストレージ|4/128GB">
       <div class="gadget-photo"><span class="gadget-fallback" aria-hidden="true">📱</span><img src="gadgets/iphone-13-mini.jpg" alt="iPhone 13 mini" loading="lazy" onerror="this.remove()"></div>
       <div class="gadget-info"><b>iPhone 13 mini</b><span>サイズが良すぎる。</span></div>
     </li>
