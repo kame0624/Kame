@@ -4,6 +4,7 @@
   var ITEMS = [
     { href: "index.html#top",   label: "ホーム",     page: "index.html" },
     { href: "index.html#about", label: "自己紹介" },
+    { href: "works.html",       label: "作ったもの", page: "works.html" },
     { href: "blog.html",        label: "ブログ",     page: "blog.html" },
     { href: "maimai.html",      label: "maimai",     page: "maimai.html" },
     { href: "gadgets.html",     label: "ガジェット", page: "gadgets.html" },
