@@ -178,8 +178,8 @@ p{margin:0 0 12px}
 
 /* 訪問者カウンター(Moe-Counter) */
 .counter{margin-top:56px;text-align:center}
-.counter p{margin:0 0 8px;font-size:12px;color:var(--dim)}
-.counter img{display:inline-block;max-width:100%;height:auto;max-height:48px}
+.counter p{margin:0 0 10px;font-size:13px;color:var(--dim)}
+.counter img{display:inline-block;max-width:100%;height:auto;max-height:76px;image-rendering:pixelated}
 
 /* maimai: レーティング推移 */
 .hist-sum{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
@@ -187,3 +187,20 @@ p{margin:0 0 12px}
 .hist-sum span{font-size:13px;color:var(--dim)}
 .hist-chart{margin-top:6px}
 .hist-chart svg{display:block;width:100%;height:auto;overflow:visible}
+
+/* ---- ページ切り替えのアニメーション ----
+   背景・左上のサイト名・右上のメニューはそのまま残して、本文だけがふわっと入れ替わる。
+   (Chrome / Safari の「ページ間トランジション」を使用。動きを減らす設定の人には出さない) */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  .bg { view-transition-name: kame-bg; }
+  .brand { view-transition-name: kame-brand; }
+  .menu { view-transition-name: kame-menu; }
+  ::view-transition-old(kame-bg), ::view-transition-new(kame-bg),
+  ::view-transition-old(kame-brand), ::view-transition-new(kame-brand),
+  ::view-transition-old(kame-menu), ::view-transition-new(kame-menu) { animation: none; mix-blend-mode: normal; }
+  ::view-transition-old(root) { animation: kame-out .14s ease-in both; }
+  ::view-transition-new(root) { animation: kame-in .3s cubic-bezier(.2,.7,.2,1) both; }
+}
+@keyframes kame-out { to { opacity: 0; transform: translateY(-6px); } }
+@keyframes kame-in { from { opacity: 0; transform: translateY(12px); } }
