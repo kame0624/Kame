@@ -1,6 +1,13 @@
 {
   "updated": "2026.10.24",
-  "new": [],
+  "new": [
+    {
+      "title": "The Happycore Idol",
+      "diff": "MASTER",
+      "c": 13.7,
+      "a": 100.8623
+    }
+  ],
   "old": [
     {
       "title": "Liftoff",
