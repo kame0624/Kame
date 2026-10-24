@@ -38,14 +38,14 @@ dialog.gd .gd-body p:empty{display:none}
 /* スペック: 2列のタイル。長いものとカメラは横いっぱい */
 dialog.gd .gd-spec{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:18px 0 0;padding:0;width:100%}
 dialog.gd .gd-spec[hidden]{display:none}
-dialog.gd .gd-spec .tile{box-sizing:border-box;min-width:0;padding:12px 14px;border-radius:18px;background:linear-gradient(135deg,rgba(255,255,255,.1),rgba(255,255,255,.04));border:1px solid rgba(255,255,255,.14)}
-dialog.gd .gd-spec .tile.wide{grid-column:1/-1}
+dialog.gd .gd-spec .gd-tile{box-sizing:border-box;min-width:0;padding:12px 14px;border-radius:18px;background:linear-gradient(135deg,rgba(255,255,255,.1),rgba(255,255,255,.04));border:1px solid rgba(255,255,255,.14)}
+dialog.gd .gd-spec .gd-tile.gd-wide{grid-column:1/-1}
 dialog.gd .gd-spec dt{margin:0 0 3px;color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.08em;line-height:1.5;white-space:normal}
 dialog.gd .gd-spec dd{margin:0;min-width:0;font-size:15px;font-weight:700;line-height:1.6;white-space:pre-line;overflow-wrap:break-word;word-break:normal}
-dialog.gd .gd-spec .cam{display:flex;align-items:baseline;gap:12px;padding:5px 0;min-width:0}
-dialog.gd .gd-spec .cam + .cam{border-top:1px solid rgba(255,255,255,.1)}
-dialog.gd .gd-spec .cam-t{flex:none;width:4.6em;font-size:12px;font-weight:700;color:var(--dim)}
-dialog.gd .gd-spec .cam span:last-child{flex:1 1 0;min-width:0}
+dialog.gd .gd-spec .gd-cam{display:flex;align-items:baseline;gap:12px;padding:5px 0;min-width:0}
+dialog.gd .gd-spec .gd-cam + .gd-cam{border-top:1px solid rgba(255,255,255,.1)}
+dialog.gd .gd-spec .gd-cam-t{flex:none;width:4.6em;font-size:12px;font-weight:700;color:var(--dim)}
+dialog.gd .gd-spec .gd-cam span:last-child{flex:1 1 0;min-width:0}
 
 @media (max-width:640px){
   dialog.gd{width:100%;margin:auto auto 0;border-radius:30px 30px 0 0;border-bottom:0;max-height:94dvh}
@@ -71,11 +71,11 @@ dialog.gd .gd-spec .cam span:last-child{flex:1 1 0;min-width:0}
        どちらも管理ページの「ガジェット」タブから入力できます。 -->
   <h2>スマホ</h2>
   <ul class="list gadget-list">
-    <li class="glass gadget-card" data-spec="SoC|Mediatek Dimensty9400&#10;カメラ|メイン::50MP 1/1.28インチ F1.57 OIS&#10;カメラ|超広角::50MP 1/2.76インチ F2.0&#10;カメラ|望遠::50MP 1/1.95インチ F2.57&#10;ディスプレイ|6.31インチ&#10;メモリ/ストレージ|12/256&#10;バッテリー|5700mAh">
+    <li class="glass gadget-card">
       <div class="gadget-photo"><span class="gadget-fallback" aria-hidden="true">📱</span><img src="gadgets/vivo-x200-pro-mini.jpg" alt="Vivo X200 Pro mini" loading="lazy" onerror="this.remove()"></div>
       <div class="gadget-info"><b>Vivo X200 Pro mini</b><span>カメラと性能が素晴らしい。</span></div>
     </li>
-    <li class="glass gadget-card" data-spec="SoC|Apple A15 Bionic&#10;カメラ|メイン::12MP&#10;カメラ|超広角::12MP&#10;ディスプレイ|5.4インチ&#10;メモリ/ストレージ|4/128">
+    <li class="glass gadget-card">
       <div class="gadget-photo"><span class="gadget-fallback" aria-hidden="true">📱</span><img src="gadgets/iphone-13-mini.jpg" alt="iPhone 13 mini" loading="lazy" onerror="this.remove()"></div>
       <div class="gadget-info"><b>iPhone 13 mini</b><span>サイズが良すぎる。</span></div>
     </li>
@@ -174,17 +174,17 @@ dialog.gd .gd-spec .cam span:last-child{flex:1 1 0;min-width:0}
       var dt = document.createElement("dt"); dt.textContent = en.k;
       var dd = document.createElement("dd");
       if (en.cam && !(cams.length === 1 && !cams[0].t)) {
-        tile.className = "tile wide";
+        tile.className = "gd-tile gd-wide";
         cams.forEach(function (cm) {
-          var r = document.createElement("div"); r.className = "cam";
-          if (cm.t) { var t = document.createElement("span"); t.className = "cam-t"; t.textContent = cm.t; r.appendChild(t); }
+          var r = document.createElement("div"); r.className = "gd-cam";
+          if (cm.t) { var t = document.createElement("span"); t.className = "gd-cam-t"; t.textContent = cm.t; r.appendChild(t); }
           var c = document.createElement("span"); c.textContent = cm.c; r.appendChild(c);
           dd.appendChild(r);
         });
       } else {
         var val = en.cam ? cams[0].c : en.v;
         dd.textContent = val;
-        tile.className = "tile" + (val.length > 16 || val.indexOf("\n") >= 0 ? " wide" : "");
+        tile.className = "gd-tile" + (val.length > 16 || val.indexOf("\n") >= 0 ? " gd-wide" : "");
       }
       tile.appendChild(dt); tile.appendChild(dd); specEl.appendChild(tile);
     });
